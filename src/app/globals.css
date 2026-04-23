@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --------------------
+   Global Styles
+--------------------- */
+
+/* Apply a clean default font */
+body {
+  @apply bg-white text-gray-900 font-sans;
+}
+
+/* Ensure proper text rendering on mobile */
+html {
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+}
+
+/* Headings - consistent font weights with responsive scaling */
+h1, h2, h3, h4, h5, h6 {
+  @apply font-bold tracking-tight;
+}
+
+/* Links */
+a {
+  @apply text-gray-800 hover:text-gray-600 transition-colors;
+}
+
+/* Buttons reset with better touch targets */
+button {
+  @apply focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black;
+  min-height: 44px; /* iOS/Android minimum touch target */
+}
+
+/* Container helper with responsive padding */
+.container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+/* Responsive text truncation */
+.text-responsive {
+  @apply text-sm sm:text-base lg:text-lg;
+}
+
+/* Better responsive images */
+img {
+  @apply max-w-full h-auto;
+}
+
+/* Scrollbar styling (optional, for modern look) */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db; /* gray-300 */
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af; /* gray-400 */
+}
