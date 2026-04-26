@@ -4,8 +4,7 @@ import Link from "next/link";
 import { ActionButton } from "@/ui/components/button";
 import { ProductCard } from "@/ui/components/product";
 import { sampleProducts } from "@/ui/components/product/sample-data";
-
-const categories = ["All", "Fashion", "Accessories", "Jewelry", "Home Decor", "Footwear"];
+import { PRODUCT_FILTER_CATEGORIES as categories } from "@/ui/components/product/categories";
 
 export default function FeaturedProducts() {
   const [selectedCategory, setSelectedCategory] = useState("All");

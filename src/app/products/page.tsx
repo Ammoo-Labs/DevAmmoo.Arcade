@@ -5,8 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Filter, Search, X } from "lucide-react";
 import { ProductCard } from "@/ui/components/product";
 import { allProducts } from "@/ui/components/product/all-products";
-
-const categories = ["All", "Fashion", "Accessories", "Jewelry", "Home Decor", "Footwear"];
+import { PRODUCT_FILTER_CATEGORIES as categories } from "@/ui/components/product/categories";
 
 function ProductsContent() {
   const searchParams = useSearchParams();

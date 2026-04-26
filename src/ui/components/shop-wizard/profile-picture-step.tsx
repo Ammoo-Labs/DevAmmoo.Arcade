@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef } from "react";
-import { Camera, Upload, X, CropIcon, ShieldCheck, FileText } from "lucide-react";
+import { Camera, Upload, X, CropIcon, ShieldCheck, FileText, Hash } from "lucide-react";
 import { ShopWizardData } from "./shop-wizard";
 import ImageCropper from "./image-cropper";
 
@@ -25,11 +25,8 @@ export default function ProfilePictureStep({
   onNext,
   onPrev,
 }: ProfilePictureStepProps) {
-  // Raw file URLs (for the cropper input)
   const [profileRawUrl, setProfileRawUrl] = useState<string | null>(null);
   const [coverRawUrl, setCoverRawUrl] = useState<string | null>(null);
-
-  // Final cropped previews (what gets saved)
   const [profilePreview, setProfilePreview] = useState<string | null>(
     data.profilePictureCropped || null
   );
@@ -37,12 +34,10 @@ export default function ProfilePictureStep({
     data.coverPictureCropped || null
   );
 
-  // ID verification state
   const [idPreview, setIdPreview] = useState<string | null>(data.idPhotoPreview || null);
   const [idType, setIdType] = useState(data.idType || "");
+  const [idNumber, setIdNumber] = useState(data.idNumber || "");
   const [idError, setIdError] = useState("");
-
-  // Cropper state
   const [cropTarget, setCropTarget] = useState<CropTarget>(null);
 
   const profileInputRef = useRef<HTMLInputElement>(null);
@@ -123,14 +118,24 @@ export default function ProfilePictureStep({
     setIdError("");
   };
 
+  const handleIdNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIdNumber(e.target.value);
+    updateData({ idNumber: e.target.value });
+    setIdError("");
+  };
+
   // ── Validation & proceed ──────────────────────────────────────
   const handleNext = () => {
     if (!idType) {
-      setIdError("Please select the type of ID document");
+      setIdError("Please select the type of ID document.");
+      return;
+    }
+    if (!idNumber.trim() || idNumber.trim().length < 7) {
+      setIdError("Please enter your ID number (min 7 characters).");
       return;
     }
     if (!idPreview) {
-      setIdError("An ID photo is required to proceed. Please upload a valid document.");
+      setIdError("Please upload a photo of your ID document.");
       return;
     }
     onNext();
@@ -158,7 +163,6 @@ export default function ProfilePictureStep({
           </label>
 
           <div className="flex items-center gap-5">
-            {/* Preview circle */}
             <div className="relative flex-shrink-0">
               <div className="w-24 h-24 rounded-full border-2 border-gray-300 overflow-hidden bg-gray-100 flex items-center justify-center">
                 {profilePreview ? (
@@ -196,8 +200,7 @@ export default function ProfilePictureStep({
                   }}
                   className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-black transition-colors"
                 >
-                  <CropIcon className="w-4 h-4" />
-                  Re-crop
+                  <CropIcon className="w-4 h-4" /> Re-crop
                 </button>
               )}
               <p className="text-xs text-gray-400">JPG, PNG · max 2 MB · will be cropped to circle</p>
@@ -273,13 +276,13 @@ export default function ProfilePictureStep({
             <div>
               <h3 className="text-sm font-semibold text-amber-900">Identity Verification Required</h3>
               <p className="text-xs text-amber-700 mt-0.5">
-                Upload a clear photo of a valid government-issued ID. This is mandatory to protect
-                buyers and ensure vendor authenticity.
+                Provide your government-issued ID details. This is mandatory to protect buyers and
+                ensure vendor authenticity.
               </p>
             </div>
           </div>
 
-          {/* ID type selector */}
+          {/* Step 1: ID type */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-800 mb-1.5">
               ID Document Type <span className="text-red-500">*</span>
@@ -300,15 +303,51 @@ export default function ProfilePictureStep({
             </select>
           </div>
 
-          {/* ID photo upload */}
+          {/* Step 2: ID number (must be completed before photo unlock) */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-800 mb-1.5">
+              ID Number <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                value={idNumber}
+                onChange={handleIdNumberChange}
+                disabled={!idType}
+                placeholder={idType ? "Enter your ID number" : "Select an ID type first"}
+                className={`w-full pl-9 pr-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-400 ${
+                  idError && idType && (!idNumber.trim() || idNumber.trim().length < 7)
+                    ? "border-red-400"
+                    : "border-gray-300"
+                }`}
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Complete the ID number field to unlock photo upload.
+            </p>
+          </div>
+
+          {/* Step 3: ID photo (unlocked after type + number) */}
           <div>
             <label className="block text-sm font-medium text-gray-800 mb-1.5">
               ID Photo <span className="text-red-500">*</span>
             </label>
 
-            {idPreview ? (
+            {!idType || !idNumber.trim() ? (
+              <div className="border-2 border-dashed border-amber-200 rounded-xl p-6 text-center bg-amber-50/50 opacity-60">
+                <FileText className="mx-auto h-8 w-8 text-amber-300 mb-2" />
+                <p className="text-sm text-gray-400">
+                  Fill in the ID type and ID number above to unlock photo upload.
+                </p>
+              </div>
+            ) : idPreview ? (
               <div className="relative rounded-lg overflow-hidden border border-gray-200">
-                <img src={idPreview} alt="ID document" className="w-full h-36 object-contain bg-gray-100" />
+                <img
+                  src={idPreview}
+                  alt="ID document"
+                  className="w-full h-36 object-contain bg-gray-100"
+                />
                 <button
                   onClick={removeId}
                   className="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 shadow"
@@ -327,14 +366,16 @@ export default function ProfilePictureStep({
                 <FileText className="mx-auto h-8 w-8 text-amber-500 mb-2" />
                 <p className="text-sm text-gray-700 font-medium">Click to upload ID photo</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Clear photo of your NIC, Passport, or Driver's License
+                  Clear photo of your {ID_TYPES.find((t) => t.value === idType)?.label}
                 </p>
               </div>
             )}
 
             {idError && (
               <p className="mt-2 text-sm text-red-600 flex items-center gap-1.5">
-                <span className="inline-block w-4 h-4 rounded-full bg-red-100 text-red-600 text-xs flex items-center justify-center">!</span>
+                <span className="inline-block w-4 h-4 rounded-full bg-red-100 text-red-600 text-xs flex items-center justify-center">
+                  !
+                </span>
                 {idError}
               </p>
             )}
@@ -366,7 +407,7 @@ export default function ProfilePictureStep({
         </div>
       </div>
 
-      {/* ── Cropper Modals ─────────────────────────── */}
+      {/* Cropper Modals */}
       {cropTarget === "profile" && profileRawUrl && (
         <ImageCropper
           imageUrl={profileRawUrl}

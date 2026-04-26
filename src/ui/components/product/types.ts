@@ -9,6 +9,7 @@ export interface Product {
   rating: number;
   reviews: number;
   image: string | StaticImageData;
+  image2?: string | StaticImageData;
   category: string;
   description?: string;
   isNew?: boolean;

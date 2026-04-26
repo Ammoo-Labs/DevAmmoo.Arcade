@@ -12,8 +12,14 @@ export interface FirstProduct {
   category: string;
   price: string;
   description: string;
-  image: File | null;
-  imagePreview: string | null;
+  // Required images
+  frontImage: File | null;
+  frontImagePreview: string | null;
+  backImage: File | null;
+  backImagePreview: string | null;
+  // Optional gallery (up to 3)
+  galleryImages: File[];
+  galleryPreviews: string[];
 }
 
 export interface ShopWizardData {
@@ -27,6 +33,7 @@ export interface ShopWizardData {
   idPhoto: File | null;
   idPhotoPreview: string | null;
   idType: string;
+  idNumber: string;
   // Step 3 – Contact
   nic: string;
   telephone: string;
@@ -49,6 +56,7 @@ const INITIAL_DATA: ShopWizardData = {
   idPhoto: null,
   idPhotoPreview: null,
   idType: "",
+  idNumber: "",
   nic: "",
   telephone: "",
   address: "",
@@ -61,8 +69,12 @@ const INITIAL_DATA: ShopWizardData = {
     category: "",
     price: "",
     description: "",
-    image: null,
-    imagePreview: null,
+    frontImage: null,
+    frontImagePreview: null,
+    backImage: null,
+    backImagePreview: null,
+    galleryImages: [],
+    galleryPreviews: [],
   },
 };
 

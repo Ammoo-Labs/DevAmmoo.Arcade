@@ -2,14 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp } from "lucide-react";
-
-const navItems = [
-  { name: "Mens", dropdown: ["T-Shirts", "Jeans", "Jackets", "Shirts", "Shorts"] },
-  { name: "Womens", dropdown: ["Dresses", "Tops", "Jeans", "Skirts", "Blouses"] },
-  { name: "Accessories", dropdown: ["Watches", "Bags", "Belts", "Sunglasses", "Jewelry"] },
-  { name: "Footwear", dropdown: ["Sneakers", "Boots", "Sandals", "Formal Shoes", "Athletic"] },
-  { name: "Sale", dropdown: ["Men's Sale", "Women's Sale", "Accessories Sale", "Clearance"] },
-];
+import { NAV_CATEGORIES as navItems } from "@/ui/components/product/categories";
 
 export default function Navbar() {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
