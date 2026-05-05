@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   Menu,
   X,
@@ -13,17 +12,18 @@ import {
   ChevronLeft,
   ChevronRight,
   Home,
-  LogOut
+  LogOut,
+  CreditCard,
 } from "lucide-react";
 import { ActionButton, IconButton } from "@/ui/components/button";
 import { useAuth } from "@/ui/components/auth/auth-context";
 import { useRouter } from "next/navigation";
 
-// Import components
 import EditProfile from "@/ui/components/seller-dashboard/edit-profile/edit-profile";
 import ShopOverview from "@/ui/components/seller-dashboard/shop-overview/shop-overview";
 import Products from "@/ui/components/seller-dashboard/products/products";
 import Orders from "@/ui/components/seller-dashboard/orders/orders";
+import Payouts from "@/ui/components/seller-dashboard/payouts/payouts";
 
 interface NavItem {
   id: string;
@@ -33,31 +33,11 @@ interface NavItem {
 }
 
 const navigationItems: NavItem[] = [
-  {
-    id: "overview",
-    icon: Home,
-    label: "Dashboard",
-    description: "Main overview"
-  },
-  {
-    id: "profile",
-    icon: User,
-    label: "Edit Profile",
-    description: "Manage your profile"
-  },
-  
-  {
-    id: "products",
-    icon: Package,
-    label: "Products",
-    description: "Manage your products"
-  },
-  {
-    id: "orders",
-    icon: ShoppingBag,
-    label: "Orders",
-    description: "Manage orders"
-  }
+  { id: "overview", icon: Home, label: "Dashboard", description: "Main overview" },
+  { id: "profile", icon: User, label: "Edit Profile", description: "Manage your profile" },
+  { id: "products", icon: Package, label: "Products", description: "Manage your products" },
+  { id: "orders", icon: ShoppingBag, label: "Orders", description: "Manage orders" },
+  { id: "payouts", icon: CreditCard, label: "Payouts", description: "Earnings & bank details" },
 ];
 
 export default function SellerDashboard() {
@@ -67,29 +47,18 @@ export default function SellerDashboard() {
   const { logout } = useAuth();
   const router = useRouter();
 
-  const toggleSidebar = () => {
-    setIsCollapsed(!isCollapsed);
-  };
-
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
-  };
-
   const handleLogout = () => {
     logout();
-    router.push('/');
+    router.push("/");
   };
 
   const renderContent = () => {
     switch (activeTab) {
-      case "profile":
-        return <EditProfile />;
-      case "products":
-        return <Products />;
-      case "orders":
-        return <Orders />;
-      default:
-        return <ShopOverview />; // Default to overview
+      case "profile":  return <EditProfile />;
+      case "products": return <Products />;
+      case "orders":   return <Orders />;
+      case "payouts":  return <Payouts />;
+      default:         return <ShopOverview />;
     }
   };
 
@@ -100,14 +69,14 @@ export default function SellerDashboard() {
         <IconButton
           icon="custom"
           customIcon={isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          onClick={toggleMobileMenu}
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className="bg-white shadow-lg"
         />
       </div>
 
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
-        <div 
+        <div
           className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
           onClick={() => setIsMobileMenuOpen(false)}
         />
@@ -117,13 +86,13 @@ export default function SellerDashboard() {
       <aside
         className={`
           fixed top-0 left-0 h-full bg-white shadow-lg border-r border-gray-200 z-45
-          transition-all duration-300 ease-in-out
+          transition-all duration-300 ease-in-out flex flex-col
           ${isCollapsed ? "w-16" : "w-64"}
           ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
       >
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200">
+        {/* Sidebar Header */}
+        <div className="p-4 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center justify-between">
             {!isCollapsed && (
               <div>
@@ -131,13 +100,17 @@ export default function SellerDashboard() {
                 <p className="text-sm text-gray-500">Manage your store</p>
               </div>
             )}
-            
-            {/* Desktop Collapse Button */}
             <div className="hidden lg:block">
               <IconButton
                 icon="custom"
-                customIcon={isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-                onClick={toggleSidebar}
+                customIcon={
+                  isCollapsed ? (
+                    <ChevronRight className="w-4 h-4" />
+                  ) : (
+                    <ChevronLeft className="w-4 h-4" />
+                  )
+                }
+                onClick={() => setIsCollapsed(!isCollapsed)}
                 variant="ghost"
                 size="sm"
               />
@@ -146,12 +119,11 @@ export default function SellerDashboard() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4">
-          <ul className="space-y-2">
+        <nav className="flex-1 p-4 overflow-y-auto">
+          <ul className="space-y-1">
             {navigationItems.map((item) => {
               const Icon = item.icon;
               const active = activeTab === item.id;
-              
               return (
                 <li key={item.id}>
                   <button
@@ -160,13 +132,11 @@ export default function SellerDashboard() {
                       setIsMobileMenuOpen(false);
                     }}
                     className={`
-                      w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors duration-200
-                      ${active 
-                        ? "bg-black text-white" 
-                        : "text-gray-700 hover:bg-gray-100"
-                      }
+                      w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors duration-200
+                      ${active ? "bg-black text-white" : "text-gray-700 hover:bg-gray-100"}
                       ${isCollapsed ? "justify-center" : ""}
                     `}
+                    title={isCollapsed ? item.label : undefined}
                   >
                     <Icon className="w-5 h-5 flex-shrink-0" />
                     {!isCollapsed && (
@@ -182,22 +152,26 @@ export default function SellerDashboard() {
           </ul>
         </nav>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-gray-200 space-y-2">
+        {/* Sidebar Footer */}
+        <div className="p-4 border-t border-gray-200 space-y-2 flex-shrink-0">
           <Link href="/">
             <ActionButton
               variant="secondary"
-              className={`w-full flex items-center ${isCollapsed ? "justify-center px-2" : "justify-start space-x-2"}`}
+              className={`w-full flex items-center ${
+                isCollapsed ? "justify-center px-2" : "justify-start space-x-2"
+              }`}
             >
               <Home className="w-4 h-4" />
               {!isCollapsed && <span>Back to Shop</span>}
             </ActionButton>
           </Link>
-          
+
           <ActionButton
             onClick={handleLogout}
             variant="secondary"
-            className={`w-full flex items-center ${isCollapsed ? "justify-center px-2" : "justify-start space-x-2"} text-red-600 hover:text-red-700 hover:bg-red-50`}
+            className={`w-full flex items-center ${
+              isCollapsed ? "justify-center px-2" : "justify-start space-x-2"
+            } text-red-600 hover:text-red-700 hover:bg-red-50`}
           >
             <LogOut className="w-4 h-4" />
             {!isCollapsed && <span>Logout</span>}
@@ -207,9 +181,7 @@ export default function SellerDashboard() {
 
       {/* Main Content */}
       <main className={`transition-all duration-300 ${isCollapsed ? "lg:ml-16" : "lg:ml-64"}`}>
-        <div className="p-4 lg:p-8 pt-32 lg:pt-24">
-          {renderContent()}
-        </div>
+        <div className="p-4 lg:p-8 pt-32 lg:pt-24">{renderContent()}</div>
       </main>
     </div>
   );

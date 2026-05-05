@@ -12,7 +12,30 @@ import { shopClasses } from "@/ui/components/shop/shop-colors";
 import Button from "@/ui/components/button/button";
 import { ProductCard, Product } from "@/ui/components/product";
 import { sampleProducts } from "@/ui/components/product/sample-data";
+import { getSellerProducts } from "@/ui/components/seller-dashboard/seller-store";
 import Link from "next/link";
+
+// Map a SellerProduct to the ProductCard Product interface
+function toProductCardItem(sp: ReturnType<typeof getSellerProducts>[number], shopName: string): Product {
+  return {
+    id: sp.id,
+    name: sp.name,
+    creator: shopName,
+    price: sp.price,
+    originalPrice: sp.originalPrice ?? null,
+    rating: 4.5,
+    reviews: sp.sales,
+    image: sp.image || "/api/placeholder/300/300",
+    image2: "/api/placeholder/300/300",
+    category: sp.category,
+    description: sp.description,
+    isNew: false,
+    isLiked: false,
+    inStock: sp.stock > 0,
+    store: shopName,
+    tags: sp.tags,
+  };
+}
 
 const sampleShopsData = {
   "ammoo-arcade": {
@@ -44,7 +67,21 @@ const sampleShopsData = {
   },
 };
 
-const getShopProducts = (_shopId: string): Product[] => sampleProducts.slice(0, 8);
+// shopId → sellerId mapping for demo
+const SHOP_SELLER_MAP: Record<string, string> = {
+  "sarahs-boutique": "seller-sarah",
+};
+
+function getShopProducts(shopId: string, shopName: string): Product[] {
+  const sellerId = SHOP_SELLER_MAP[shopId];
+  if (sellerId) {
+    const sellerProducts = getSellerProducts(sellerId).filter((p) => p.status === "active");
+    if (sellerProducts.length > 0) {
+      return sellerProducts.map((sp) => toProductCardItem(sp, shopName));
+    }
+  }
+  return sampleProducts.slice(0, 8);
+}
 
 export default function ShopClient({ shopId }: { shopId: string }) {
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -66,7 +103,7 @@ export default function ShopClient({ shopId }: { shopId: string }) {
         setIsLoading(false);
         return;
       }
-      const products = getShopProducts(shopId);
+      const products = getShopProducts(shopId, shop.name);
       setShopData(shop);
       setAllProducts(products);
       setFilteredProducts(products);

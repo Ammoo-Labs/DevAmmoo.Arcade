@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, CreditCard, Truck, CheckCircle } from "lucide-react";
 import { ActionButton } from "@/ui/components/button";
 import { useCart } from "@/ui/components/cart";
+import { addOrder, SellerOrder } from "@/ui/components/seller-dashboard/seller-store";
 
 type Step = "details" | "payment" | "confirmation";
 
@@ -38,8 +39,39 @@ export default function CheckoutPage() {
 
   const handlePlaceOrder = async () => {
     setIsProcessing(true);
-    // Simulate order processing
     await new Promise((resolve) => setTimeout(resolve, 1800));
+
+    // Persist order in the seller store so it appears in the seller's OMS
+    const orderId = `ORD-${Date.now()}`;
+    const order: SellerOrder = {
+      id: orderId,
+      sellerId: "seller-sarah", // default demo seller owns all products
+      customer: {
+        name: `${formData.firstName} ${formData.lastName}`.trim() || "Guest",
+        email: formData.email || "guest@example.com",
+      },
+      products: cartItems.map((item) => ({
+        name: item.name,
+        image: typeof item.image === "string" ? item.image : "",
+        quantity: item.quantity,
+        price: item.price,
+        size: item.size,
+        color: item.color,
+      })),
+      total,
+      subtotal,
+      tax,
+      shipping,
+      status: "pending",
+      paymentStatus: "paid",
+      orderDate: new Date().toISOString().split("T")[0],
+      shippingAddress: [formData.address, formData.city, formData.postalCode, formData.country]
+        .filter(Boolean)
+        .join(", "),
+      statusHistory: [{ status: "pending", timestamp: new Date().toISOString() }],
+    };
+    addOrder(order);
+
     clearCart();
     setStep("confirmation");
     setIsProcessing(false);
