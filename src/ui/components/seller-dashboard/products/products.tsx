@@ -12,7 +12,10 @@ import {
   X,
   Save,
   Tag,
+  Upload,
+  ImageIcon,
 } from "lucide-react";
+import { useRef } from "react";
 import { ActionButton, IconButton } from "@/ui/components/button";
 import {
   SellerProduct,
@@ -58,6 +61,16 @@ export default function Products() {
   const [tagInput, setTagInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [viewProduct, setViewProduct] = useState<SellerProduct | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setForm((f) => ({ ...f, image: dataUrl }));
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     setProducts(getSellerProducts(SELLER_ID));
@@ -474,18 +487,57 @@ export default function Products() {
                 />
               </div>
 
-              {/* Image URL */}
+              {/* Image upload */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Image URL <span className="text-gray-400 font-normal">(optional)</span>
+                  Product Image <span className="text-gray-400 font-normal">(optional)</span>
                 </label>
                 <input
-                  type="url"
-                  value={form.image}
-                  onChange={(e) => setForm((f) => ({ ...f, image: e.target.value }))}
-                  placeholder="https://example.com/image.jpg"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black"
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageFile(file);
+                  }}
                 />
+                <div
+                  className="relative w-full h-36 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-black transition-colors overflow-hidden bg-gray-50"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file && file.type.startsWith("image/")) handleImageFile(file);
+                  }}
+                >
+                  {form.image ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={form.image} alt="Preview" className="absolute inset-0 w-full h-full object-cover rounded-lg" />
+                      <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-1">
+                        <Upload className="w-5 h-5 text-white" />
+                        <span className="text-white text-xs font-medium">Click to change</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <ImageIcon className="w-8 h-8 text-gray-400" />
+                      <p className="text-sm text-gray-500">Click or drag &amp; drop to upload</p>
+                      <p className="text-xs text-gray-400">PNG, JPG, WEBP up to 5MB</p>
+                    </>
+                  )}
+                </div>
+                {form.image && (
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, image: "" }))}
+                    className="mt-1 text-xs text-red-500 hover:text-red-700"
+                  >
+                    Remove image
+                  </button>
+                )}
               </div>
 
               {/* Tags */}

@@ -77,9 +77,20 @@ export default function ProductCard({
 
         {/* Product Info */}
         <div className="p-2 sm:p-3">
-          <h3 className="text-xs sm:text-sm font-medium text-gray-900 line-clamp-2 mb-1.5">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-900 line-clamp-2 mb-0.5">
             {product.name}
           </h3>
+
+          {/* Creator / store link */}
+          {product.store && (
+            <Link
+              href={`/shop/${product.store.toLowerCase().replace(/\s+/g, "-")}`}
+              onClick={(e) => e.stopPropagation()}
+              className="text-xs text-gray-500 hover:text-black hover:underline transition-colors block mb-1.5 truncate"
+            >
+              {product.store}
+            </Link>
+          )}
 
           {/* Price row with cart button */}
           <div className="flex items-center justify-between gap-1">

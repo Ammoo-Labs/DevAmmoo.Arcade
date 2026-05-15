@@ -1,11 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ShopNameStep from "./shop-name-step";
 import ProfilePictureStep from "./profile-picture-step";
 import ContactInfoStep from "./contact-info-step";
 import SocialMediaStep from "./social-media-step";
 import FirstListingStep from "./first-listing-step";
 import ApprovalWaitingStep from "./approval-waiting-step";
+
+const WIZARD_STORAGE_KEY = "ammoo-shop-wizard";
 
 export interface FirstProduct {
   name: string;
@@ -87,16 +89,119 @@ const STEPS = [
   "Approval",
 ];
 
+// Serialise only the safe (non-File) fields so we can persist across refreshes.
+function serialise(step: number, data: ShopWizardData) {
+  try {
+    const safe = {
+      step,
+      shopName: data.shopName,
+      profilePictureCropped: data.profilePictureCropped,
+      coverPictureCropped: data.coverPictureCropped,
+      idPhotoPreview: data.idPhotoPreview,
+      idType: data.idType,
+      idNumber: data.idNumber,
+      nic: data.nic,
+      telephone: data.telephone,
+      address: data.address,
+      facebook: data.facebook,
+      instagram: data.instagram,
+      twitter: data.twitter,
+      website: data.website,
+      firstProduct: {
+        name: data.firstProduct.name,
+        category: data.firstProduct.category,
+        price: data.firstProduct.price,
+        description: data.firstProduct.description,
+        frontImagePreview: data.firstProduct.frontImagePreview,
+        backImagePreview: data.firstProduct.backImagePreview,
+        galleryPreviews: data.firstProduct.galleryPreviews,
+      },
+    };
+    localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(safe));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function deserialise(): { step: number; data: ShopWizardData } | null {
+  try {
+    const raw = localStorage.getItem(WIZARD_STORAGE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    const data: ShopWizardData = {
+      ...INITIAL_DATA,
+      shopName: saved.shopName ?? "",
+      profilePictureCropped: saved.profilePictureCropped ?? null,
+      coverPictureCropped: saved.coverPictureCropped ?? null,
+      idPhotoPreview: saved.idPhotoPreview ?? null,
+      idType: saved.idType ?? "",
+      idNumber: saved.idNumber ?? "",
+      nic: saved.nic ?? "",
+      telephone: saved.telephone ?? "",
+      address: saved.address ?? "",
+      facebook: saved.facebook ?? "",
+      instagram: saved.instagram ?? "",
+      twitter: saved.twitter ?? "",
+      website: saved.website ?? "",
+      firstProduct: {
+        ...INITIAL_DATA.firstProduct,
+        name: saved.firstProduct?.name ?? "",
+        category: saved.firstProduct?.category ?? "",
+        price: saved.firstProduct?.price ?? "",
+        description: saved.firstProduct?.description ?? "",
+        frontImagePreview: saved.firstProduct?.frontImagePreview ?? null,
+        backImagePreview: saved.firstProduct?.backImagePreview ?? null,
+        galleryPreviews: saved.firstProduct?.galleryPreviews ?? [],
+      },
+    };
+    return { step: saved.step ?? 1, data };
+  } catch {
+    return null;
+  }
+}
+
 export default function ShopWizard() {
   const [currentStep, setCurrentStep] = useState(1);
   const [wizardData, setWizardData] = useState<ShopWizardData>(INITIAL_DATA);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Restore persisted state on mount
+  useEffect(() => {
+    const saved = deserialise();
+    if (saved) {
+      setCurrentStep(saved.step);
+      setWizardData(saved.data);
+    }
+    setHydrated(true);
+  }, []);
 
   const updateWizardData = (data: Partial<ShopWizardData>) => {
-    setWizardData((prev) => ({ ...prev, ...data }));
+    setWizardData((prev) => {
+      const next = { ...prev, ...data };
+      serialise(currentStep, next);
+      return next;
+    });
   };
 
-  const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, STEPS.length));
-  const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
+  const nextStep = () =>
+    setCurrentStep((prev) => {
+      const next = Math.min(prev + 1, STEPS.length);
+      serialise(next, wizardData);
+      if (next === STEPS.length) {
+        // On submission clear the saved draft
+        localStorage.removeItem(WIZARD_STORAGE_KEY);
+      }
+      return next;
+    });
+
+  const prevStep = () =>
+    setCurrentStep((prev) => {
+      const next = Math.max(prev - 1, 1);
+      serialise(next, wizardData);
+      return next;
+    });
+
+  if (!hydrated) return null; // avoid flash of wrong step
 
   return (
     <div className="min-h-screen bg-gray-50 py-4 sm:py-8">

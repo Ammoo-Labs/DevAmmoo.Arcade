@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, CreditCard, Truck, CheckCircle } from "lucide-react";
@@ -12,7 +12,7 @@ type Step = "details" | "payment" | "confirmation";
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { cartItems, getCartTotal, clearCart } = useCart();
+  const { cartItems, removeFromCart, clearCart } = useCart();
   const [step, setStep] = useState<Step>("details");
   const [isProcessing, setIsProcessing] = useState(false);
   const [formData, setFormData] = useState({
@@ -28,7 +28,21 @@ export default function CheckoutPage() {
     cardCvc: "",
   });
 
-  const subtotal = getCartTotal();
+  // Read selected IDs from sessionStorage (set by cart page)
+  const selectedItems = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem("ammoo-checkout-selected");
+      if (!raw) return cartItems;
+      const ids: number[] = JSON.parse(raw);
+      if (!ids.length) return cartItems;
+      const idSet = new Set(ids);
+      return cartItems.filter((i) => idSet.has(i.id));
+    } catch {
+      return cartItems;
+    }
+  }, [cartItems]);
+
+  const subtotal = selectedItems.reduce((s, i) => s + i.price * i.quantity, 0);
   const shipping = subtotal > 50 ? 0 : 9.99;
   const tax = subtotal * 0.08;
   const total = subtotal + shipping + tax;
@@ -50,7 +64,7 @@ export default function CheckoutPage() {
         name: `${formData.firstName} ${formData.lastName}`.trim() || "Guest",
         email: formData.email || "guest@example.com",
       },
-      products: cartItems.map((item) => ({
+      products: selectedItems.map((item) => ({
         name: item.name,
         image: typeof item.image === "string" ? item.image : "",
         quantity: item.quantity,
@@ -72,12 +86,18 @@ export default function CheckoutPage() {
     };
     addOrder(order);
 
-    clearCart();
+    // Remove only selected items from cart; clear sessionStorage key
+    sessionStorage.removeItem("ammoo-checkout-selected");
+    if (selectedItems.length === cartItems.length) {
+      clearCart();
+    } else {
+      for (const item of selectedItems) removeFromCart(item.id);
+    }
     setStep("confirmation");
     setIsProcessing(false);
   };
 
-  if (cartItems.length === 0 && step !== "confirmation") {
+  if (selectedItems.length === 0 && step !== "confirmation") {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="text-center">
@@ -319,7 +339,7 @@ export default function CheckoutPage() {
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 h-fit sticky top-4">
             <h2 className="text-lg font-semibold mb-4">Order Summary</h2>
             <div className="space-y-3 mb-4 max-h-48 overflow-y-auto">
-              {cartItems.map((item) => (
+              {selectedItems.map((item) => (
                 <div key={item.id} className="flex justify-between items-start gap-2 text-sm">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 truncate">{item.name}</p>

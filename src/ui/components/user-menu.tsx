@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChevronDown, LogOut, User, Store } from "lucide-react";
 import { ActionButton } from "@/ui/components/button";
 import { useAuth } from "@/ui/components/auth/auth-context";
@@ -14,6 +15,7 @@ export default function UserMenu({ buttonText = "Welcome" }: UserMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { isAuthenticated, user, logout } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -28,6 +30,7 @@ export default function UserMenu({ buttonText = "Welcome" }: UserMenuProps) {
   const handleLogout = () => {
     logout();
     setIsOpen(false);
+    router.push("/");
   };
 
   const displayName = isAuthenticated && user ? user.name.split(" ")[0] : buttonText;

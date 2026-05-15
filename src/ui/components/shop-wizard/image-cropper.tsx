@@ -22,31 +22,21 @@ export default function ImageCropper({
   const vpW = viewportWidth;
   const vpH = useMemo(() => Math.round(vpW / aspectRatio), [vpW, aspectRatio]);
 
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // naturalWidth / naturalHeight of the source image
+  const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
+  // Base displayed size (covers the viewport at zoom = 1)
+  const [imgBase, setImgBase] = useState({ w: vpW, h: vpH });
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [imgBase, setImgBase] = useState({ w: vpW, h: vpH });
-
-  const handleImageLoad = () => {
-    const img = imageRef.current;
-    if (!img) return;
-    const nw = img.naturalWidth;
-    const nh = img.naturalHeight;
-    // "cover" scale: image fills the viewport at zoom=1
-    const fitScale = Math.max(vpW / nw, vpH / nh);
-    setImgBase({ w: nw * fitScale, h: nh * fitScale });
-    setZoom(1);
-    setOffset({ x: 0, y: 0 });
-  };
 
   const clampOffset = useCallback(
-    (x: number, y: number, z: number) => {
-      const scaledW = imgBase.w * z;
-      const scaledH = imgBase.h * z;
+    (x: number, y: number, z: number, base: { w: number; h: number }) => {
+      const scaledW = base.w * z;
+      const scaledH = base.h * z;
       const maxX = Math.max(0, (scaledW - vpW) / 2);
       const maxY = Math.max(0, (scaledH - vpH) / 2);
       return {
@@ -54,9 +44,86 @@ export default function ImageCropper({
         y: Math.max(-maxY, Math.min(maxY, y)),
       };
     },
-    [imgBase, vpW, vpH]
+    [vpW, vpH]
   );
 
+  // Load image metadata, draw initial frame
+  useEffect(() => {
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const nw = img.naturalWidth;
+      const nh = img.naturalHeight;
+      // "cover" scale: image fills the viewport at zoom = 1
+      const fitScale = Math.max(vpW / nw, vpH / nh);
+      const base = { w: nw * fitScale, h: nh * fitScale };
+      setNaturalSize({ w: nw, h: nh });
+      setImgBase(base);
+      setZoom(1);
+      setOffset({ x: 0, y: 0 });
+    };
+    img.src = imageUrl;
+  }, [imageUrl, vpW, vpH]);
+
+  // Re-draw the canvas preview whenever zoom, offset or base changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || naturalSize.w === 0) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const scaledW = imgBase.w * zoom;
+    const scaledH = imgBase.h * zoom;
+
+    // Top-left corner of the image relative to the viewport top-left
+    const imgLeft = (vpW - scaledW) / 2 + offset.x;
+    const imgTop = (vpH - scaledH) / 2 + offset.y;
+
+    // Source rectangle in natural-image coordinates
+    const scaleToNat = naturalSize.w / scaledW; // same ratio as naturalH / scaledH
+    const srcX = Math.max(0, -imgLeft * scaleToNat);
+    const srcY = Math.max(0, -imgTop * scaleToNat);
+    const srcW = Math.min(naturalSize.w - srcX, vpW * scaleToNat);
+    const srcH = Math.min(naturalSize.h - srcY, vpH * scaleToNat);
+
+    canvas.width = vpW;
+    canvas.height = vpH;
+    ctx.clearRect(0, 0, vpW, vpH);
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, vpW, vpH);
+
+    // Clip circle if needed
+    if (shape === "circle") {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(vpW / 2, vpH / 2, Math.min(vpW, vpH) / 2, 0, Math.PI * 2);
+      ctx.clip();
+    }
+
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, vpW, vpH);
+      if (shape === "circle") ctx.restore();
+
+      // Draw grid overlay
+      ctx.strokeStyle = "rgba(255,255,255,0.2)";
+      ctx.lineWidth = 1;
+      for (let i = 1; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo((vpW / 3) * i, 0);
+        ctx.lineTo((vpW / 3) * i, vpH);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, (vpH / 3) * i);
+        ctx.lineTo(vpW, (vpH / 3) * i);
+        ctx.stroke();
+      }
+    };
+    img.src = imageUrl;
+  }, [zoom, offset, imgBase, naturalSize, vpW, vpH, shape, imageUrl]);
+
+  // Drag handlers
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -66,26 +133,19 @@ export default function ImageCropper({
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length !== 1) return;
     setIsDragging(true);
-    setDragStart({
-      x: e.touches[0].clientX - offset.x,
-      y: e.touches[0].clientY - offset.y,
-    });
+    setDragStart({ x: e.touches[0].clientX - offset.x, y: e.touches[0].clientY - offset.y });
   };
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (!isDragging) return;
-      setOffset(clampOffset(e.clientX - dragStart.x, e.clientY - dragStart.y, zoom));
+      setOffset(clampOffset(e.clientX - dragStart.x, e.clientY - dragStart.y, zoom, imgBase));
     };
     const onTouchMove = (e: TouchEvent) => {
       if (!isDragging || e.touches.length !== 1) return;
       e.preventDefault();
       setOffset(
-        clampOffset(
-          e.touches[0].clientX - dragStart.x,
-          e.touches[0].clientY - dragStart.y,
-          zoom
-        )
+        clampOffset(e.touches[0].clientX - dragStart.x, e.touches[0].clientY - dragStart.y, zoom, imgBase)
       );
     };
     const stopDrag = () => setIsDragging(false);
@@ -100,38 +160,32 @@ export default function ImageCropper({
       document.removeEventListener("touchmove", onTouchMove);
       document.removeEventListener("touchend", stopDrag);
     };
-  }, [isDragging, dragStart, zoom, clampOffset]);
+  }, [isDragging, dragStart, zoom, imgBase, clampOffset]);
 
   const handleZoomChange = (newZoom: number) => {
     setZoom(newZoom);
-    setOffset((prev) => clampOffset(prev.x, prev.y, newZoom));
+    setOffset((prev) => clampOffset(prev.x, prev.y, newZoom, imgBase));
   };
 
+  // Produce the final high-res crop using the same math as the preview canvas
   const applyCrop = () => {
-    const vp = viewportRef.current;
-    const img = imageRef.current;
-    if (!vp || !img) return;
+    if (naturalSize.w === 0) return;
 
-    // getBoundingClientRect gives actual rendered positions accounting for CSS transforms
-    const vpRect = vp.getBoundingClientRect();
-    const imgRect = img.getBoundingClientRect();
+    const scaledW = imgBase.w * zoom;
+    const imgLeft = (vpW - scaledW) / 2 + offset.x;
+    const imgTop = (vpH - imgBase.h * zoom) / 2 + offset.y;
 
-    // Crop region in rendered image coordinates
-    const srcX_px = vpRect.left - imgRect.left;
-    const srcY_px = vpRect.top - imgRect.top;
+    // How many natural pixels per displayed pixel
+    const scaleToNat = naturalSize.w / scaledW;
 
-    // Scale from rendered size to natural size
-    const scaleX = img.naturalWidth / imgRect.width;
-    const scaleY = img.naturalHeight / imgRect.height;
+    const srcX = Math.max(0, -imgLeft * scaleToNat);
+    const srcY = Math.max(0, -imgTop * scaleToNat);
+    const srcW = Math.min(naturalSize.w - srcX, vpW * scaleToNat);
+    const srcH = Math.min(naturalSize.h - srcY, vpH * scaleToNat);
 
-    const srcX = Math.max(0, srcX_px * scaleX);
-    const srcY = Math.max(0, srcY_px * scaleY);
-    const srcW = Math.min(img.naturalWidth - srcX, vpRect.width * scaleX);
-    const srcH = Math.min(img.naturalHeight - srcY, vpRect.height * scaleY);
-
-    // Output canvas dimensions
-    const outW = shape === "circle" ? 400 : Math.round(400 * aspectRatio);
-    const outH = 400;
+    // Output resolution: preserve aspect ratio at 800px wide
+    const outW = shape === "circle" ? 800 : Math.round(800 * aspectRatio);
+    const outH = 800;
 
     const canvas = document.createElement("canvas");
     canvas.width = outW;
@@ -145,12 +199,14 @@ export default function ImageCropper({
       ctx.clip();
     }
 
-    ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
-    onCrop(canvas.toDataURL("image/jpeg", 0.92));
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
+      onCrop(canvas.toDataURL("image/jpeg", 0.92));
+    };
+    img.src = imageUrl;
   };
-
-  const scaledW = imgBase.w * zoom;
-  const scaledH = imgBase.h * zoom;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4">
@@ -168,52 +224,25 @@ export default function ImageCropper({
           </button>
         </div>
 
-        {/* Crop Viewport */}
+        {/* Canvas-based crop preview */}
         <div className="flex justify-center mb-3">
-          <div
-            ref={viewportRef}
-            className={`relative bg-gray-900 select-none overflow-hidden ${
-              isDragging ? "cursor-grabbing" : "cursor-grab"
-            } ${shape === "circle" ? "rounded-full ring-2 ring-black ring-offset-2" : "rounded-xl"}`}
-            style={{ width: vpW, height: vpH }}
+          <canvas
+            ref={canvasRef}
+            width={vpW}
+            height={vpH}
+            className={`select-none ${isDragging ? "cursor-grabbing" : "cursor-grab"} ${
+              shape === "circle" ? "rounded-full ring-2 ring-black ring-offset-2" : "rounded-xl"
+            }`}
+            style={{ width: vpW, height: vpH, display: "block" }}
             onMouseDown={handleMouseDown}
             onTouchStart={handleTouchStart}
-          >
-            {/* Rule-of-thirds grid overlay */}
-            <div
-              className="absolute inset-0 pointer-events-none z-10"
-              style={{
-                backgroundImage: [
-                  `linear-gradient(rgba(255,255,255,0.2) 1px, transparent 1px)`,
-                  `linear-gradient(90deg, rgba(255,255,255,0.2) 1px, transparent 1px)`,
-                ].join(", "),
-                backgroundSize: `${vpW / 3}px ${vpH / 3}px`,
-              }}
-            />
-            <img
-              ref={imageRef}
-              src={imageUrl}
-              alt="Crop preview"
-              onLoad={handleImageLoad}
-              draggable={false}
-              style={{
-                position: "absolute",
-                width: scaledW,
-                height: scaledH,
-                left: "50%",
-                top: "50%",
-                transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px))`,
-                userSelect: "none",
-                pointerEvents: "none",
-              }}
-            />
-          </div>
+          />
         </div>
 
         {/* Hint */}
         <p className="text-center text-xs text-gray-400 mb-3 flex items-center justify-center gap-1">
           <Move className="w-3 h-3" />
-          Drag to reposition · pinch or use slider to zoom
+          Drag to reposition · use slider to zoom
         </p>
 
         {/* Zoom Slider */}
@@ -233,9 +262,7 @@ export default function ImageCropper({
           <button onClick={() => handleZoomChange(Math.min(3, zoom + 0.1))} className="text-gray-400 hover:text-gray-700">
             <ZoomIn className="w-4 h-4" />
           </button>
-          <span className="text-xs text-gray-400 w-10 text-right">
-            {Math.round(zoom * 100)}%
-          </span>
+          <span className="text-xs text-gray-400 w-10 text-right">{Math.round(zoom * 100)}%</span>
         </div>
 
         {/* Actions */}

@@ -258,8 +258,8 @@ export default function ProductDetails({ product, onBack }: ProductDetailsProps)
   const images = [
     product.image,
     ...(product.image2 ? [product.image2] : []),
-    "/api/placeholder/400/400",
-    "/api/placeholder/400/400",
+    `https://picsum.photos/seed/${product.id}-detail-a/400/500`,
+    `https://picsum.photos/seed/${product.id}-detail-b/400/500`,
   ];
 
   const sizes = ["XS", "S", "M", "L", "XL"];

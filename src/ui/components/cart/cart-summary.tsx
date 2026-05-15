@@ -7,15 +7,17 @@ import { ShoppingBag, CreditCard } from "lucide-react";
 interface CartSummaryProps {
   summary: CartSummary;
   itemCount: number;
+  selectedCount: number;
   onCheckout: () => void;
   onContinueShopping: () => void;
 }
 
-export default function CartSummaryCard({ 
-  summary, 
-  itemCount, 
-  onCheckout, 
-  onContinueShopping 
+export default function CartSummaryCard({
+  summary,
+  itemCount,
+  selectedCount,
+  onCheckout,
+  onContinueShopping,
 }: CartSummaryProps) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6 sticky top-4">
@@ -24,7 +26,9 @@ export default function CartSummaryCard({
       <div className="space-y-4">
         {/* Item Count */}
         <div className="flex justify-between text-sm text-gray-600">
-          <span>Items ({itemCount})</span>
+          <span>
+            Items ({selectedCount} of {itemCount} selected)
+          </span>
           <span>${summary.subtotal.toFixed(2)}</span>
         </div>
 
@@ -74,9 +78,10 @@ export default function CartSummaryCard({
           onClick={onCheckout}
           size="lg"
           className="w-full"
+          disabled={selectedCount === 0}
         >
           <CreditCard className="w-4 h-4 mr-2" />
-          Proceed to Checkout
+          {selectedCount === 0 ? "Select items to checkout" : `Checkout ${selectedCount} item${selectedCount !== 1 ? "s" : ""}`}
         </ActionButton>
         
         <ActionButton
