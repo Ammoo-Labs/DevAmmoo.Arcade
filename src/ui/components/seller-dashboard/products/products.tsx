@@ -19,6 +19,7 @@ import { useRef } from "react";
 import { ActionButton, IconButton } from "@/ui/components/button";
 import {
   SellerProduct,
+  PostApprovalStatus,
   getSellerProducts,
   saveSellerProduct,
   deleteSellerProduct,
@@ -46,6 +47,7 @@ const emptyForm: Omit<SellerProduct, "id" | "sellerId" | "sales" | "createdAt"> 
   originalPrice: undefined,
   stock: 0,
   status: "draft",
+  approvalStatus: "pending",
   image: "",
   description: "",
   tags: [],
@@ -84,6 +86,15 @@ export default function Products() {
     return "bg-yellow-100 text-yellow-800";
   };
 
+  const APPROVAL_CFG: Record<string, { label: string; cls: string }> = {
+    pending:      { label: "Pending Review", cls: "bg-yellow-100 text-yellow-800" },
+    approved:     { label: "Approved",       cls: "bg-green-100 text-green-800" },
+    rejected:     { label: "Rejected",       cls: "bg-red-100 text-red-800" },
+    under_review: { label: "Under Review",   cls: "bg-orange-100 text-orange-800" },
+  };
+
+  const rejectedProducts = products.filter((p) => p.approvalStatus === "rejected");
+
   const getStockStatus = (stock: number) => {
     if (stock === 0) return { label: "Out of Stock", color: "text-red-600" };
     if (stock <= 5) return { label: "Low Stock", color: "text-yellow-600" };
@@ -114,6 +125,7 @@ export default function Products() {
       originalPrice: product.originalPrice,
       stock: product.stock,
       status: product.status,
+      approvalStatus: product.approvalStatus ?? "pending",
       image: product.image,
       description: product.description,
       tags: product.tags ?? [],
@@ -182,6 +194,21 @@ export default function Products() {
           <span>Add Product</span>
         </ActionButton>
       </div>
+
+      {/* Rejected products alert */}
+      {rejectedProducts.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-2">
+          <p className="text-sm font-semibold text-red-800">
+            {rejectedProducts.length} product{rejectedProducts.length > 1 ? "s" : ""} rejected — please review and resubmit
+          </p>
+          {rejectedProducts.map((p) => (
+            <div key={p.id} className="flex items-start gap-2">
+              <span className="text-xs text-red-700 font-medium">• {p.name}:</span>
+              <span className="text-xs text-red-600 italic">{p.rejectionComment || "No reason given"}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Stats strip */}
       <div className="grid grid-cols-3 gap-4">
@@ -253,6 +280,7 @@ export default function Products() {
                 <th className="text-left py-3 px-4 font-medium text-gray-900">Price</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-900">Stock</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-900">Status</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-900">Approval</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-900">Sales</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-900">Actions</th>
               </tr>
@@ -308,6 +336,16 @@ export default function Products() {
                         <option value="inactive">Inactive</option>
                         <option value="draft">Draft</option>
                       </select>
+                    </td>
+                    <td className="py-4 px-4">
+                      {(() => {
+                        const aCfg = APPROVAL_CFG[product.approvalStatus ?? "pending"];
+                        return (
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${aCfg.cls}`}>
+                            {aCfg.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-4 px-4 text-gray-600">{product.sales}</td>
                     <td className="py-4 px-4">

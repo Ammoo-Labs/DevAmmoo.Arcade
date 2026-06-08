@@ -16,6 +16,8 @@ import {
   ChevronDown,
   ChevronRight,
   Clipboard,
+  Upload,
+  ImageIcon,
 } from "lucide-react";
 import { ActionButton, IconButton } from "@/ui/components/button";
 import {
@@ -28,6 +30,7 @@ import {
   getBuyerNotifications,
   BuyerNotification,
 } from "@/ui/components/seller-dashboard/seller-store";
+import { useRef } from "react";
 
 const SELLER_ID = "seller-sarah";
 
@@ -112,7 +115,9 @@ export default function Orders() {
     status: OrderStatus;
   } | null>(null);
   const [trackingInput, setTrackingInput] = useState("");
+  const [handoverProofInput, setHandoverProofInput] = useState<string>("");
   const [transitioning, setTransitioning] = useState(false);
+  const handoverFileRef = useRef<HTMLInputElement>(null);
 
   const reload = () => {
     setOrders(getOrders(SELLER_ID));
@@ -132,19 +137,33 @@ export default function Orders() {
     return matchesSearch && (statusFilter === "all" || o.status === statusFilter);
   });
 
+  const handleHandoverFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setHandoverProofInput(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const handleTransitionClick = (orderId: string, newStatus: OrderStatus) => {
     if (newStatus === "shipped") {
       setPendingTransition({ orderId, status: newStatus });
       setTrackingInput("");
+      setHandoverProofInput("");
     } else {
       applyTransition(orderId, newStatus);
     }
   };
 
-  const applyTransition = async (orderId: string, newStatus: OrderStatus, tracking?: string) => {
+  const applyTransition = async (
+    orderId: string,
+    newStatus: OrderStatus,
+    tracking?: string,
+    handoverProof?: string
+  ) => {
     setTransitioning(true);
     await new Promise((r) => setTimeout(r, 400));
-    updateOrderStatus(orderId, newStatus, tracking);
+    updateOrderStatus(orderId, newStatus, { trackingNumber: tracking, handoverProof });
     reload();
     if (selectedOrder?.id === orderId) {
       const updated = getOrders(SELLER_ID).find((o) => o.id === orderId) ?? null;
@@ -386,9 +405,11 @@ export default function Orders() {
             </div>
             <div className="p-6 space-y-4">
               <p className="text-sm text-gray-600">
-                Enter a tracking number for order <strong>{pendingTransition.orderId}</strong>. This will trigger an
-                automatic notification to the buyer.
+                Enter a tracking number and upload proof of handover for order{" "}
+                <strong>{pendingTransition.orderId}</strong>.
               </p>
+
+              {/* Tracking Number */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Tracking Number <span className="text-gray-400 font-normal">(optional)</span>
@@ -404,8 +425,51 @@ export default function Orders() {
                   />
                 </div>
               </div>
+
+              {/* Handover Proof Upload */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Proof of Handover <span className="text-red-500">*</span>
+                  <span className="text-gray-400 font-normal ml-1">(photo/receipt showing courier received the parcel)</span>
+                </label>
+                <input
+                  ref={handoverFileRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={handleHandoverFile}
+                />
+                {handoverProofInput ? (
+                  <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <img
+                      src={handoverProofInput.startsWith("data:image") ? handoverProofInput : undefined}
+                      alt="proof"
+                      className="w-12 h-12 object-cover rounded border border-green-300"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-green-800 font-medium">Proof uploaded</p>
+                      <button
+                        onClick={() => setHandoverProofInput("")}
+                        className="text-xs text-green-600 hover:text-red-500 mt-0.5"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handoverFileRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Click to upload handover proof
+                  </button>
+                )}
+              </div>
+
               <div className="bg-purple-50 rounded-lg p-3 text-xs text-purple-700">
-                📢 The buyer will receive an in-app notification that their order has shipped.
+                📢 The buyer will receive an in-app notification. The admin will also see the tracking ID.
               </div>
             </div>
             <div className="border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
@@ -414,9 +478,14 @@ export default function Orders() {
               </ActionButton>
               <ActionButton
                 onClick={() =>
-                  applyTransition(pendingTransition.orderId, pendingTransition.status, trackingInput || undefined)
+                  applyTransition(
+                    pendingTransition.orderId,
+                    pendingTransition.status,
+                    trackingInput || undefined,
+                    handoverProofInput || undefined
+                  )
                 }
-                disabled={transitioning}
+                disabled={transitioning || !handoverProofInput}
                 className="flex items-center gap-2"
               >
                 <Truck className="w-4 h-4" />
@@ -545,7 +614,7 @@ export default function Orders() {
                           key={t}
                           onClick={() => {
                             setSelectedOrder(null);
-                            handleTransitionClick(selectedOrder.id, t);
+                            handleTransitionClick(selectedOrder!.id, t);
                           }}
                           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
                             isCancel

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/ui/components/auth/auth-context";
 import {
@@ -24,6 +24,7 @@ import {
   ArrowLeft,
   ShoppingCart,
   Heart,
+  Camera,
 } from "lucide-react";
 import { ActionButton } from "@/ui/components/button";
 import Link from "next/link";
@@ -55,8 +56,9 @@ interface ProfileForm {
 }
 
 export default function ProfilePage() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, updateUser } = useAuth();
   const router = useRouter();
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -85,9 +87,26 @@ export default function ProfilePage() {
     }
   }, [user]);
 
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      updateUser({ profileImage: dataUrl });
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     await new Promise((r) => setTimeout(r, 700));
+    updateUser({
+      name: form.name,
+      email: form.email,
+      phone: form.phone as any,
+      address: form.address as any,
+    } as any);
     setIsEditing(false);
     setIsSaving(false);
   };
@@ -131,9 +150,9 @@ export default function ProfilePage() {
         {/* Profile Header */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-            {/* Avatar */}
-            <div className="relative flex-shrink-0">
-              {user.profileImage ? (
+            {/* Avatar with upload overlay */}
+            <div className="relative flex-shrink-0 group">
+              {user.profileImage && !user.profileImage.startsWith("/api/") ? (
                 <img
                   src={user.profileImage}
                   alt={user.name}
@@ -144,6 +163,23 @@ export default function ProfilePage() {
                   <User className="w-9 h-9 text-white" />
                 </div>
               )}
+
+              {/* Camera overlay — always accessible */}
+              <button
+                onClick={() => photoInputRef.current?.click()}
+                className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-all cursor-pointer"
+                title="Change profile photo"
+              >
+                <Camera className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoChange}
+              />
+
               <div className="absolute -bottom-1 -right-1">
                 {user.isVerified ? (
                   <CheckCircle className="w-6 h-6 text-green-500 bg-white rounded-full" />
@@ -167,6 +203,7 @@ export default function ProfilePage() {
                 {user.isVerified ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
                 {user.isVerified ? "Verified" : "Unverified"}
               </span>
+              <p className="text-xs text-gray-400 mt-2">Hover over photo to change it</p>
             </div>
 
             <ActionButton

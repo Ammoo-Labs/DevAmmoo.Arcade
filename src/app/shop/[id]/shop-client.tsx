@@ -12,7 +12,12 @@ import { shopClasses } from "@/ui/components/shop/shop-colors";
 import Button from "@/ui/components/button/button";
 import { ProductCard, Product } from "@/ui/components/product";
 import { sampleProducts } from "@/ui/components/product/sample-data";
-import { getSellerProducts } from "@/ui/components/seller-dashboard/seller-store";
+import {
+  getSellerProducts,
+  getSellerProfile,
+  getSellerAccountStatus,
+} from "@/ui/components/seller-dashboard/seller-store";
+import { users } from "@/data/users";
 import Link from "next/link";
 
 // Map a SellerProduct to the ProductCard Product interface
@@ -37,7 +42,12 @@ function toProductCardItem(sp: ReturnType<typeof getSellerProducts>[number], sho
   };
 }
 
-const sampleShopsData = {
+// Hard-coded demo shop data — fallback if no localStorage profile exists
+const HARDCODED_SHOPS: Record<string, {
+  id: string; name: string; description: string;
+  logo: string; banner: string; categories: string[];
+  stats: { products: number; followers: number; rating: number };
+}> = {
   "ammoo-arcade": {
     id: "ammoo-arcade",
     name: "Ammoo Arcade",
@@ -67,18 +77,61 @@ const sampleShopsData = {
   },
 };
 
-// shopId → sellerId mapping for demo
-const SHOP_SELLER_MAP: Record<string, string> = {
+// Hard-coded shopId → sellerId mapping for demo shops
+const HARDCODED_SELLER_MAP: Record<string, string> = {
   "sarahs-boutique": "seller-sarah",
 };
 
-function getShopProducts(shopId: string, shopName: string): Product[] {
-  const sellerId = SHOP_SELLER_MAP[shopId];
-  if (sellerId) {
-    const sellerProducts = getSellerProducts(sellerId).filter((p) => p.status === "active");
-    if (sellerProducts.length > 0) {
-      return sellerProducts.map((sp) => toProductCardItem(sp, shopName));
-    }
+// Compute a slug from a shop name (same algo as product-card.tsx)
+function toSlug(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, "-");
+}
+
+// Build shop data dynamically from users + seller profiles stored in localStorage
+function getDynamicShopData(shopId: string) {
+  // Check if this ID matches any user's userId directly
+  const userById = users.find((u) => u.id === shopId && u.role === "seller");
+  if (userById) {
+    const profile = getSellerProfile(shopId);
+    return {
+      id: shopId,
+      name: profile.shopName ?? userById.shopName ?? userById.name,
+      description: profile.shopDescription ?? userById.shopDescription ?? "",
+      logo: profile.profileImage ?? "",
+      banner: profile.bannerImage ?? "",
+      categories: ["All"],
+      stats: { products: 0, followers: 0, rating: 4.0 },
+      sellerId: shopId,
+    };
+  }
+
+  // Check if this slug matches a user's shop name
+  const userBySlug = users.find(
+    (u) => u.role === "seller" && toSlug(u.shopName ?? "") === shopId
+  );
+  if (userBySlug) {
+    const profile = getSellerProfile(userBySlug.id);
+    return {
+      id: shopId,
+      name: profile.shopName ?? userBySlug.shopName ?? userBySlug.name,
+      description: profile.shopDescription ?? userBySlug.shopDescription ?? "",
+      logo: profile.profileImage ?? "",
+      banner: profile.bannerImage ?? "",
+      categories: ["All"],
+      stats: { products: 0, followers: 0, rating: 4.0 },
+      sellerId: userBySlug.id,
+    };
+  }
+
+  return null;
+}
+
+function getShopProducts(shopId: string, sellerId: string, shopName: string): Product[] {
+  const sellerProducts = getSellerProducts(sellerId).filter(
+    (p) => p.status === "active" && p.approvalStatus === "approved"
+  );
+  if (sellerProducts.length > 0) {
+    return sellerProducts.map((sp) => toProductCardItem(sp, shopName));
   }
   return sampleProducts.slice(0, 8);
 }
@@ -86,10 +139,16 @@ function getShopProducts(shopId: string, shopName: string): Product[] {
 export default function ShopClient({ shopId }: { shopId: string }) {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-  const [shopData, setShopData] = useState<(typeof sampleShopsData)[keyof typeof sampleShopsData] | null>(null);
+  const [shopData, setShopData] = useState<{
+    id: string; name: string; description: string;
+    logo: string; banner: string; categories: string[];
+    stats: { products: number; followers: number; rating: number };
+    sellerId?: string;
+  } | null>(null);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [isSuspended, setIsSuspended] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [currentSection, setCurrentSection] = useState<"home" | "shipping" | "returns">("home");
 
@@ -97,18 +156,50 @@ export default function ShopClient({ shopId }: { shopId: string }) {
     const load = async () => {
       setIsLoading(true);
       await new Promise((r) => setTimeout(r, 300));
-      const shop = sampleShopsData[shopId as keyof typeof sampleShopsData];
-      if (!shop) {
-        setNotFound(true);
+
+      // 1. Try hardcoded shop
+      const hardcoded = HARDCODED_SHOPS[shopId];
+      if (hardcoded) {
+        const sellerId = HARDCODED_SELLER_MAP[shopId];
+        if (sellerId) {
+          const status = getSellerAccountStatus(sellerId);
+          if (status !== "active") {
+            setIsSuspended(true);
+            setIsLoading(false);
+            return;
+          }
+        }
+        const products = sellerId
+          ? getShopProducts(shopId, sellerId, hardcoded.name)
+          : sampleProducts.slice(0, 8);
+        setShopData({ ...hardcoded, sellerId });
+        setAllProducts(products);
+        setFilteredProducts(products);
         setIsLoading(false);
         return;
       }
-      const products = getShopProducts(shopId, shop.name);
-      setShopData(shop);
-      setAllProducts(products);
-      setFilteredProducts(products);
+
+      // 2. Try dynamic seller lookup
+      const dynamic = getDynamicShopData(shopId);
+      if (dynamic) {
+        const status = getSellerAccountStatus(dynamic.sellerId);
+        if (status !== "active") {
+          setIsSuspended(true);
+          setIsLoading(false);
+          return;
+        }
+        const products = getShopProducts(shopId, dynamic.sellerId, dynamic.name);
+        setShopData(dynamic);
+        setAllProducts(products);
+        setFilteredProducts(products);
+        setIsLoading(false);
+        return;
+      }
+
+      setNotFound(true);
       setIsLoading(false);
     };
+
     if (shopId) load();
   }, [shopId]);
 
@@ -127,6 +218,25 @@ export default function ShopClient({ shopId }: { shopId: string }) {
         <div className="text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-black mx-auto" />
           <p className={`mt-4 ${shopClasses.text.muted}`}>Loading shop...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isSuspended) {
+    return (
+      <div className={`min-h-screen ${shopClasses.bg.secondary} flex items-center justify-center`}>
+        <div className="text-center max-w-sm mx-auto px-4">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Shop Unavailable</h1>
+          <p className="text-gray-500 mb-6">This shop is currently under review or suspended. Please check back later.</p>
+          <Link href="/">
+            <Button variant="primary">Back to Home</Button>
+          </Link>
         </div>
       </div>
     );

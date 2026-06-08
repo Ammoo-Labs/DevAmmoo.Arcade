@@ -2,12 +2,14 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User, validateUser, getUserById } from "@/data/users";
+import { getUserOverride, saveUserOverride } from "@/ui/components/seller-dashboard/seller-store";
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  updateUser: (partial: Partial<User>) => void;
   isLoading: boolean;
 }
 
@@ -22,16 +24,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in on app initialization
     const checkAuthStatus = () => {
       try {
         const savedUserId = localStorage.getItem("userId");
         if (savedUserId) {
           const foundUser = getUserById(savedUserId);
           if (foundUser) {
-            setUser(foundUser);
+            const override = getUserOverride(savedUserId);
+            setUser({ ...foundUser, ...override });
           } else {
-            // Remove invalid user ID from storage
             localStorage.removeItem("userId");
           }
         }
@@ -49,7 +50,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const validatedUser = validateUser(email, password);
       if (validatedUser) {
-        setUser(validatedUser);
+        const override = getUserOverride(validatedUser.id);
+        setUser({ ...validatedUser, ...override });
         localStorage.setItem("userId", validatedUser.id);
         return true;
       }
@@ -65,12 +67,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     localStorage.removeItem("userId");
   };
 
+  const updateUser = (partial: Partial<User>) => {
+    if (!user) return;
+    const updated = { ...user, ...partial };
+    setUser(updated);
+    saveUserOverride(user.id, partial as any);
+  };
+
   const value: AuthContextType = {
     user,
     isAuthenticated: !!user,
     login,
     logout,
-    isLoading
+    updateUser,
+    isLoading,
   };
 
   return (

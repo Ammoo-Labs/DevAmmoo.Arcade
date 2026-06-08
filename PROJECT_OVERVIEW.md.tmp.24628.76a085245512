@@ -42,9 +42,9 @@
 
 **AMMOO ARCADE** is a marketplace e-commerce platform prototype where:
 
-- **Customers** browse products, add to cart, selectively checkout, and track their orders
-- **Sellers** onboard via a guided wizard, manage products with real image uploads, and process orders through a full OMS with delivery tracking and payouts
-- **Admins** oversee users, approve sellers, and customize the site
+- **Customers** browse products, add to cart, selectively checkout, track their orders, and visit individual seller shops
+- **Sellers** onboard via a guided wizard, manage products through an admin-approval workflow, process orders with mandatory handover proof, and configure courier preferences
+- **Admins** oversee users, approve/reject product posts, manage seller accounts (ban/suspend/approve profile changes), review all platform orders, and view all customer details
 
 Built entirely as a client-side static application — no backend. All data is persisted to `localStorage`. Deployable to any static host (GitHub Pages, Vercel, Netlify).
 
@@ -86,13 +86,13 @@ ammoo_arcade/
 │   │   ├── checkout/page.tsx                # 2-step checkout → order creation
 │   │   ├── signin/page.tsx
 │   │   ├── register/page.tsx
-│   │   ├── profile/page.tsx                 # Buyer profile + order tracking
+│   │   ├── profile/page.tsx                 # Buyer profile + order tracking + photo upload
 │   │   ├── seller/page.tsx                  # Seller dashboard (5-tab)
 │   │   ├── switch-to-selling/page.tsx       # Shop wizard entry
-│   │   ├── admin/page.tsx
+│   │   ├── admin/page.tsx                   # Admin panel (7-section)
 │   │   ├── shop/[id]/
 │   │   │   ├── page.tsx
-│   │   │   └── shop-client.tsx              # Seller-product aware storefront
+│   │   │   └── shop-client.tsx              # Dynamic seller-aware storefront
 │   │   ├── email-verification/page.tsx
 │   │   ├── verify-email/page.tsx
 │   │   └── forgot-password/page.tsx
@@ -105,7 +105,7 @@ ammoo_arcade/
 │   │       ├── footer.tsx
 │   │       ├── user-menu.tsx                # Auth-aware dropdown with home redirect on logout
 │   │       ├── Circle.tsx
-│   │       ├── auth/auth-context.tsx
+│   │       ├── auth/auth-context.tsx        # + updateUser() for profile overrides
 │   │       ├── cart/
 │   │       │   ├── cart-context.tsx
 │   │       │   ├── cart-item-card.tsx       # Checkbox-selectable item card
@@ -114,7 +114,7 @@ ammoo_arcade/
 │   │       │   └── sample-data.ts
 │   │       ├── product/
 │   │       │   ├── product-card.tsx         # Hover swap + clickable store name link
-│   │       │   ├── product-details.tsx
+│   │       │   ├── product-details.tsx      # + "Visit Store →" link
 │   │       │   ├── types.ts
 │   │       │   ├── categories.ts
 │   │       │   ├── all-products.ts          # 12 products with picsum images
@@ -155,19 +155,22 @@ ammoo_arcade/
 │   │       │   ├── first-listing-step.tsx
 │   │       │   └── approval-waiting-step.tsx
 │   │       ├── seller-dashboard/
-│   │       │   ├── seller-store.ts           # Central localStorage data layer
+│   │       │   ├── seller-store.ts           # Central localStorage data layer (all types + CRUD)
 │   │       │   ├── shop-overview/shop-overview.tsx
-│   │       │   ├── edit-profile/edit-profile.tsx
-│   │       │   ├── products/products.tsx     # Full CRUD with image upload
-│   │       │   ├── orders/orders.tsx         # Full OMS with 7-state flow
+│   │       │   ├── edit-profile/edit-profile.tsx  # + courier service field; sensitive field approval
+│   │       │   ├── products/products.tsx     # Full CRUD + approval status badges
+│   │       │   ├── orders/orders.tsx         # Full OMS + handover proof upload
 │   │       │   └── payouts/payouts.tsx       # Wallet, withdrawals, bank details
 │   │       ├── userprofile/
 │   │       │   └── quick-actions.tsx
 │   │       └── admin/
-│   │           ├── admin-sidebar.tsx
+│   │           ├── admin-sidebar.tsx         # 7-section sidebar
 │   │           ├── dashboard-overview.tsx
 │   │           ├── user-management.tsx
-│   │           ├── seller-management.tsx
+│   │           ├── seller-management.tsx     # Full rewrite — ban/suspend, profile changes, payouts
+│   │           ├── post-management.tsx       # NEW — product approval workflow
+│   │           ├── order-management.tsx      # NEW — all platform orders + tracking
+│   │           ├── customer-management.tsx   # NEW — all customers + order history
 │   │           ├── customize-website.tsx
 │   │           └── banner-form-modal.tsx
 │   │
@@ -195,16 +198,16 @@ ammoo_arcade/
 |-------|-------------|
 | `/` | **Home** — Hero banner, featured products, top sellers, creators, popular shops |
 | `/products` | **Products Listing** — Search, category filter, sort by price/rating |
-| `/products/[id]` | **Product Detail** — Image gallery, size/color picker, size guide, fit finder |
+| `/products/[id]` | **Product Detail** — Image gallery, size/color picker, size guide, fit finder, "Visit Store →" link |
 | `/cart` | **Shopping Cart** — Checkbox-selectable items, selective totals, checkout |
 | `/checkout` | **Checkout** — Shipping details → payment → confirmation; creates seller order |
 | `/signin` | **Sign In** — Email/password login |
 | `/register` | **Register** — Full registration with validation |
-| `/profile` | **User Profile** — Edit form (contact, postal code), order tracking timeline |
+| `/profile` | **User Profile** — Edit form, photo upload (hover camera overlay), order tracking timeline |
 | `/seller` | **Seller Dashboard** — 5-tab: Overview, Profile, Products, Orders, Payouts |
 | `/switch-to-selling` | **Seller Onboarding** — 6-step shop wizard with localStorage persistence |
-| `/shop/[id]` | **Shop Storefront** — Seller-specific products, policies, follow button |
-| `/admin` | **Admin Panel** — Dashboard, user/seller management, site customization |
+| `/shop/[id]` | **Shop Storefront** — Dynamic seller-aware; shows only approved active products; "Shop Unavailable" for suspended sellers |
+| `/admin` | **Admin Panel** — 7 sections: Dashboard, Seller Mgmt, Post Mgmt, Order Mgmt, Customer Mgmt, User Mgmt, Customize |
 | `/email-verification` | **Email Verification** — Post-signup confirmation page |
 | `/verify-email` | **Verify Email** — Email link verification handler |
 | `/forgot-password` | **Forgot Password** — Password reset request form |
@@ -223,6 +226,7 @@ ammoo_arcade/
 - Role-based routing: `"customer"` vs `"seller"`
 - Protected routes redirect to `/signin`
 - **Logout always redirects to home page** (`/`) — applies from header menu, profile page, and seller dashboard
+- **`updateUser(partial)`** — merges profile overrides into the live session and persists them to `ammoo-user-overrides` in localStorage; overrides are re-applied on every login/page reload
 
 **Demo Credentials:**
 
@@ -283,6 +287,7 @@ ammoo_arcade/
 - Image gallery with thumbnail strip (main + up to 4 additional images)
 - **Hover image swap** on product cards — shows front/back view on hover
 - **Clickable store name** on every product card links to the seller's shop page (`/shop/[slug]`)
+- **"Visit Store →"** link on the product detail page navigates to the seller's storefront
 - Size selector — XS, S, M, L, XL
 - Color selector — Black, White, Navy, Gray
 - Quantity stepper
@@ -316,7 +321,7 @@ ammoo_arcade/
 **Confirmation:**
 - Simulated 1.8-second processing delay
 - Generated order number
-- **Order saved to `localStorage`** via `seller-store.ts` — appears instantly in seller's OMS
+- **Order saved to `localStorage`** via `seller-store.ts` — appears instantly in seller's OMS with `approvalStatus: "pending"` on any new product
 - Only selected cart items are removed from cart; unselected items remain
 
 ---
@@ -356,17 +361,32 @@ Accessible only to users with `role: "seller"`. Collapsible sidebar on desktop, 
 | Tab | Content |
 |-----|---------|
 | Dashboard | Revenue, orders, products, followers stats; charts |
-| Edit Profile | Shop name, description, contact info, social links |
-| Products | Full CRUD product inventory with real image upload |
-| Orders | Full 7-state OMS with timeline, tracking, notifications |
+| Edit Profile | Shop name, description, contact info, social links, **courier service**, sensitive field change approval flow |
+| Products | Full CRUD product inventory with real image upload + **approval status badges** |
+| Orders | Full 7-state OMS with timeline, tracking, notifications, **mandatory handover proof** |
 | Payouts | Wallet balance, withdrawal form, bank details, history |
+
+**Edit Profile — Sensitive Field Approval (Feature E):**
+- Fields marked as sensitive: Email, Phone, Address
+- Changing any sensitive field does **not** save immediately — it triggers `submitSensitiveProfileChanges()` which suspends the seller account and stores a pending change record
+- Seller sees a yellow "Changes pending admin approval" notice
+- Non-sensitive fields (shop name, description, social links, courier service) save immediately
+- Admin can approve or reject the pending changes from the Seller Management section
 
 **Products Tab:**
 - Add / edit / delete products via modal forms
 - **Real image upload** — file selected → converted to dataURL via `FileReader` → stored in localStorage and displayed on cards
 - Drag-and-drop upload zone with preview and "Remove image" option
 - Fields: name, description, category, price, original price, stock, status (active/draft/out-of-stock), tags
+- **Approval status badge** on every product row: `Pending` (yellow) / `Approved` (green) / `Rejected` (red) / `Under Review` (blue)
+- **Rejected products banner** at the top of the tab — lists each rejected product with its admin rejection comment
+- New products default to `approvalStatus: "pending"`; **edited products reset to `"pending"`** to re-trigger the review flow
 - Stats strip: Total / Active / Out of Stock counts
+
+**Courier Service Field (Feature I):**
+- Added to Edit Profile tab alongside shop contact details
+- Free-text input with truck icon; placeholder: "e.g. Koombiyo, Parcel.lk, DHL..."
+- Saved in seller profile (non-sensitive field, saves immediately)
 
 ---
 
@@ -388,18 +408,20 @@ pending → on_hold → processing → packaged → shipped → completed
 | On Hold | Orange | Temporarily paused |
 | Processing | Blue | Being picked/packed |
 | Packaged | Indigo | Ready for courier |
-| Shipped | Purple | In transit (requires tracking number) |
+| Shipped | Purple | In transit (requires tracking number + handover proof) |
 | Completed | Green | Delivered and finalized |
 | Cancelled | Red | Order voided |
 
 **Features:**
 - **Transition enforcement** — only valid next states shown per order (no skipping)
-- **Shipping modal** — prompts for tracking number before marking as Shipped
+- **Shipping modal** — requires both a tracking number and an uploaded **handover proof image** before confirming as Shipped (Feature H)
+- **Handover proof** — seller uploads a photo (receipt, courier label, photo with courier) stored as base64 in the order record; "Confirm Shipped" button disabled until proof is provided
 - **Order detail modal** — full status timeline with connected dot indicator
 - **Status filter pills** — filter by status with per-status order counts
 - **Bell icon with unread count** — notification panel lists all buyer notifications triggered by status changes
 - **Buyer notifications** written to `localStorage` on every status change (visible in buyer profile)
 - Status history appended to each order on every transition
+- Every status update sets `adminReviewed: false` — admin dashboard shows a "New" badge until reviewed
 
 ---
 
@@ -417,6 +439,7 @@ pending → on_hold → processing → packaged → shipped → completed
 - Quick-select percentage buttons: 25% / 50% / 100% / Max
 - Custom amount input
 - Withdrawal creates a `PayoutTransaction` record in localStorage
+- Payout requests also visible in the **Admin → Seller Management → Payout Requests tab** for admin review
 
 **Bank Details Form:**
 - Fields: Bank Name, Account Holder, Account Number, Routing Number, Account Type, IBAN
@@ -436,9 +459,11 @@ pending → on_hold → processing → packaged → shipped → completed
 - Shop stats — products count, followers, star rating
 - **Follow / Unfollow** button
 - 3 navigation tabs: Products | Shipping Info | Returns & Exchanges
-- **Seller-aware product loading** — maps shop slug → seller ID via `SHOP_SELLER_MAP`; loads that seller's active products from `seller-store.ts`; falls back to sample products if none found
+- **Dynamic seller resolution** — `getDynamicShopData()` matches the shop slug against user IDs and slugified shop names, then loads the seller's profile from `ammoo-seller-profiles` (Feature C)
+- **Approved-only products** — shop product list filters to `status === "active" && approvalStatus === "approved"`; pending/rejected/under-review products are **never shown to buyers** (Feature D)
+- **Suspended seller guard** — if the seller's account status is `"suspended"` or `"banned"`, the shop shows a "Shop Unavailable" page instead of products (Feature E)
+- Seller profile image and banner loaded from localStorage seller profile for dynamic shops
 - Product cards show seeded picsum images when seller products have no uploaded image
-- Dynamic theme colors per shop (`shop-colors.ts`)
 
 ---
 
@@ -449,12 +474,14 @@ pending → on_hold → processing → packaged → shipped → completed
 Matches the site's light theme (`bg-gray-50`, white cards, standard Tailwind patterns).
 
 **Profile Header:**
-- Avatar with verification badge overlay
+- Avatar with hover camera overlay — clicking it opens a file picker (Feature B fix)
+- Uploaded photo converted to base64 via `FileReader` and persisted via `updateUser()` → `ammoo-user-overrides`
+- "Hover over photo to change it" hint text below avatar
 - Role badge and verified/unverified indicator
 
 **Edit Profile Form (toggle):**
 - Full Name, Email Address, **Contact Number** (required), City, **Postal Code**, Street Address
-- Inline save with 700ms simulated persist
+- Inline save with 700ms simulated persist; changes stored via `updateUser()` to survive page reload
 
 **Profile Details Panel:**
 - Read-only view of all profile fields including new contact/postal fields
@@ -480,17 +507,50 @@ Matches the site's light theme (`bg-gray-50`, white cards, standard Tailwind pat
 
 **File:** `src/app/admin/page.tsx`
 
-Fixed left sidebar with 7 sections:
+Fixed left sidebar with **7 sections**:
 
 | Section | Description |
 |---------|-------------|
 | Dashboard Overview | Platform-wide stats: total users, sellers, revenue, orders |
-| Seller Management | Seller list — ban/suspend/activate, profile-change approval, payout requests tab |
-| Post Management | Product approval workflow — approve/reject (with comment)/mark under review; rejected posts shown to seller |
-| Order Management | All platform orders; tracking IDs; handover proof links; `adminReviewed` flag; modular `sendTrackingNotification()` stub |
-| Customer Management | All customer accounts with order history and activity |
+| Seller Management | Full seller list — ban/suspend/activate accounts; view/approve/reject sensitive profile changes; payout request review |
+| Post Management | Product approval queue — approve, reject (with required comment), set under review |
+| Order Management | All platform orders — tracking IDs, handover proofs, admin-reviewed flag, modular notification stub |
+| Customer Management | All customer accounts — profile details, order history, activity |
 | User Management | Full user list — approve accounts, ban users |
 | Customize Website | Banner editor with modal form, theme settings |
+
+**Post Management (Feature D):**
+- Shows all seller products across the platform with seller name, price, category
+- Filter pills: All / Pending / Approved / Rejected / Under Review
+- Search by product name or seller
+- Stats cards: Total / Pending / Approved / Rejected counts
+- **Approve** — sets product to `"approved"`, immediately visible in seller shops
+- **Reject** — opens a modal requiring an admin comment; comment stored on the product and shown to seller
+- **Under Review** — intermediate state for products needing more scrutiny
+- Rejection comment displayed as italic red text below the product name
+
+**Seller Management (Feature E):**
+- Two tabs: **Sellers** and **Payout Requests**
+- Alert banners for pending profile changes and pending payout requests
+- Account status actions: Suspend ↔ Activate, Ban ↔ Unban
+- **Seller Detail Modal** — all profile fields, account status history
+- **Pending profile changes panel** — shows changed fields with old vs. new values; Approve/Reject buttons; approving merges changes and reactivates the seller; rejecting discards and reactivates
+- **Payout Requests accordion** — expandable per request; approve or reject with optional admin note
+
+**Order Management (Feature G):**
+- Reads **all orders** across all sellers (no seller filter)
+- **Unreviewed count** banner at the top — shows number of orders with new updates
+- **"New" badge** on rows where `adminReviewed === false`
+- Opening an order detail calls `markOrderAdminReviewed()` — clears the badge
+- Tracking number displayed prominently in the table and detail modal
+- Handover proof link in the detail modal
+- **Modular tracking notification block** — currently shows instruction "Check courier's website and notify customer manually"; the `sendTrackingNotification()` function in `seller-store.ts` is designed to be replaced with an AI agent call without changing callers
+
+**Customer Management (Feature F):**
+- Reads all customer accounts from the static users array, merging any `ammoo-user-overrides`
+- Stats cards: Total Customers, Verified, Active, Flagged
+- Customer list table with search
+- **Customer Detail Modal** — profile, expandable order history per customer, activity count
 
 ---
 
@@ -508,6 +568,11 @@ Fixed left sidebar with 7 sections:
 - Written to `localStorage` (`ammoo-buyer-notifications`) on every OMS status change
 - Accessible from the seller's Orders tab bell icon panel
 - Readable in buyer profile order timeline
+
+**Tracking Notifications (modular stub):**
+- `sendTrackingNotification(orderId, trackingNumber, buyerEmail)` in `seller-store.ts`
+- Currently writes a record to `ammoo-tracking-notifications`
+- Function is designed for easy replacement with an AI agent or email API — replace only the function body; all callers remain unchanged
 
 ---
 
@@ -545,7 +610,7 @@ Fixed left sidebar with 7 sections:
 | Component | Purpose |
 |-----------|---------|
 | `ProductCard` | Card with hover image swap, discount badge, like button, add to cart, **clickable store link** |
-| `ProductDetails` | Full detail view — gallery, variant picker, quantity, size guide, fit finder modals |
+| `ProductDetails` | Full detail view — gallery, variant picker, quantity, size guide, fit finder modals, **"Visit Store →" link** |
 
 ### Cart & Checkout
 | Component | Purpose |
@@ -557,22 +622,22 @@ Fixed left sidebar with 7 sections:
 | Component | Purpose |
 |-----------|---------|
 | `ShopOverview` | Stats cards and charts |
-| `EditProfile` | Shop info editor form |
-| `Products` | Full CRUD inventory with drag-drop image upload |
-| `Orders` | 7-state OMS with timeline, shipping modal, notification bell |
+| `EditProfile` | Shop info editor; sensitive fields trigger approval flow; courier service field |
+| `Products` | Full CRUD inventory; approval status badges; rejected-products alert banner |
+| `Orders` | 7-state OMS with timeline, shipping modal, handover proof upload, notification bell |
 | `Payouts` | Wallet cards, withdrawal form, bank details, payout history |
-| `seller-store.ts` | Central data layer — all localStorage read/write for orders, products, bank, transactions, notifications |
+| `seller-store.ts` | Central data layer — all localStorage read/write; product approval; seller status; payout requests; user overrides; modular notification stub |
 
 ### Admin
 | Component | Purpose |
 |-----------|---------|
-| `AdminSidebar` | Fixed left navigation (7 sections) |
+| `AdminSidebar` | Fixed left navigation — 7 sections |
 | `DashboardOverview` | Metrics and KPIs |
 | `UserManagement` | Searchable user table with action buttons |
-| `SellerManagement` | Seller list — ban/suspend/activate, profile-change approval, payout requests |
-| `PostManagement` | Product approval workflow — approve/reject/under_review |
-| `OrderManagement` | All platform orders with tracking, handover proof, adminReviewed flag |
-| `CustomerManagement` | All customers with order history and activity |
+| `SellerManagement` | Full seller list — ban/suspend, profile change approval, payout requests |
+| `PostManagement` | Product approval queue — approve/reject/under-review |
+| `OrderManagement` | All platform orders — tracking, handover proof, admin-reviewed flag |
+| `CustomerManagement` | All customers — profile, order history, activity |
 | `CustomizeWebsite` | Banner list and theme editor |
 | `BannerFormModal` | Create/edit banner modal |
 
@@ -608,6 +673,20 @@ interface User {
   wishlist?: number[];
   followedShops?: string[];
 }
+```
+
+### UserProfileOverride (localStorage overlay for User)
+
+```typescript
+interface UserProfileOverride {
+  profileImage?: string;   // base64 dataURL
+  name?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  postalCode?: string;
+}
+// stored at: ammoo-user-overrides (keyed by userId)
 ```
 
 ### Product (Buyer-facing)
@@ -648,12 +727,12 @@ interface SellerProduct {
   originalPrice?: number;
   stock: number;
   status: "active" | "draft" | "out-of-stock";
-  image: string;        // dataURL from FileReader or picsum URL
+  image: string;             // dataURL from FileReader or picsum URL
   tags: string[];
   createdAt: string;
   sales: number;
   revenue: number;
-  approvalStatus: PostApprovalStatus;   // new/edited products default to "pending"
+  approvalStatus: PostApprovalStatus;   // new products default to "pending"
   rejectionComment?: string;            // set by admin when rejecting
 }
 ```
@@ -682,8 +761,8 @@ interface SellerOrder {
   orderDate: string;
   shippingAddress: string;
   trackingNumber?: string;
-  handoverProof?: string;   // base64 image; required when marking as shipped
-  adminReviewed?: boolean;  // false whenever seller updates order; admin resets to true on view
+  handoverProof?: string;     // base64 dataURL uploaded by seller on shipment
+  adminReviewed?: boolean;    // false after every status update; true after admin opens detail
   statusHistory: StatusHistoryEntry[];
 }
 
@@ -697,22 +776,28 @@ interface StatusHistoryEntry {
 ### SellerProfile
 
 ```typescript
-type SellerAccountStatus = "active" | "suspended" | "banned";
-
 interface SellerProfile {
   sellerId: string;
   shopName: string;
   description: string;
-  profileImage?: string;
-  bannerImage?: string;
+  profileImage?: string;        // base64 dataURL
+  bannerImage?: string;         // base64 dataURL
   email: string;
   phone: string;
   address: string;
-  courierService?: string;       // preferred courier (e.g. Koombiyo, DHL)
   socialLinks?: { facebook?: string; instagram?: string; twitter?: string; website?: string };
-  pendingProfileChanges?: Partial<SellerProfile>;  // set when sensitive fields change
+  courierService?: string;      // e.g. "Koombiyo, Parcel.lk, DHL"
+  pendingProfileChanges?: Partial<SellerProfile>;
   profileChangeStatus?: "pending" | "approved" | "rejected";
 }
+// stored at: ammoo-seller-profiles
+```
+
+### SellerAccountStatus
+
+```typescript
+type SellerAccountStatus = "active" | "suspended" | "banned";
+// stored at: ammoo-seller-status (keyed by sellerId)
 ```
 
 ### PayoutRequest
@@ -721,11 +806,13 @@ interface SellerProfile {
 interface PayoutRequest {
   id: string;
   sellerId: string;
+  sellerName: string;
   amount: number;
   requestedAt: string;
   status: "pending" | "approved" | "rejected";
   adminNote?: string;
 }
+// stored at: ammoo-payout-requests
 ```
 
 ### CartItem
@@ -800,15 +887,15 @@ Hook:     useAuth()
 
 | State | Type | Description |
 |-------|------|-------------|
-| `user` | `User \| null` | Currently logged-in user |
+| `user` | `User \| null` | Currently logged-in user (merged with localStorage overrides) |
 | `isAuthenticated` | `boolean` | Derived from user != null |
 | `isLoading` | `boolean` | True during localStorage hydration |
 
 | Method | Description |
 |--------|-------------|
-| `login(email, password)` | Validates credentials, merges `ammoo-user-overrides`, sets user |
+| `login(email, password)` | Validates credentials, merges `ammoo-user-overrides`, sets user, saves to localStorage |
 | `logout()` | Clears user and localStorage; callers redirect to `/` |
-| `updateUser(partial)` | Merges partial into current user and persists to `ammoo-user-overrides` |
+| `updateUser(partial)` | Merges partial update into live session; persists to `ammoo-user-overrides`; survives page reload |
 
 ### CartContext
 
@@ -846,16 +933,16 @@ Hook:     useNotifications()
 |-----|---------|
 | `userId` | ID string of logged-in user |
 | `ammoo-cart` | JSON array of cart items |
-| `ammoo-seller-orders` | JSON array of all seller orders (includes `handoverProof`, `adminReviewed`) |
-| `ammoo-seller-products` | JSON array of all seller products (includes `approvalStatus`, `rejectionComment`) |
-| `ammoo-seller-profiles` | Seller profile objects keyed by sellerId (includes `courierService`, pending changes) |
-| `ammoo-seller-status` | Seller account status (`active`/`suspended`/`banned`) keyed by sellerId |
-| `ammoo-payout-requests` | Array of payout request objects |
-| `ammoo-user-overrides` | User profile overrides keyed by userId (profileImage, phone, etc.) |
+| `ammoo-seller-orders` | JSON array of all seller orders (all sellers) |
+| `ammoo-seller-products` | JSON array of all seller products (with `approvalStatus`) |
+| `ammoo-seller-profiles` | JSON object keyed by sellerId — full seller profile |
+| `ammoo-seller-status` | JSON object keyed by sellerId — `SellerAccountStatus` |
+| `ammoo-payout-requests` | JSON array of `PayoutRequest` objects |
+| `ammoo-user-overrides` | JSON object keyed by userId — profile field overrides |
 | `ammoo-bank-details-{sellerId}` | Bank details object per seller |
 | `ammoo-transactions-{sellerId}` | Payout transaction array per seller |
 | `ammoo-buyer-notifications` | Array of buyer notification objects |
-| `ammoo-tracking-notifications` | Modular tracking notification records (stub for future AI agent) |
+| `ammoo-tracking-notifications` | Array of modular tracking notification records |
 | `ammoo-shop-wizard` | Shop wizard draft (step + all non-File form fields) |
 
 ### sessionStorage Keys
@@ -891,7 +978,7 @@ Hook:     useNotifications()
 | Success states | Green-500 / Green-600 |
 | Error states | Red-500 / Red-600 |
 | Info states | Blue-500 |
-| Warning states | Yellow-500 |
+| Warning states | Yellow-500 / Amber-500 |
 | Borders | Gray-100 / Gray-200 |
 | Muted text | Gray-400 / Gray-500 |
 
@@ -1019,7 +1106,7 @@ Pre-seeded in localStorage on first load:
 | Category | Count | Details |
 |----------|-------|---------|
 | Orders | 7 | One in each status (pending → cancelled) |
-| Products | 5 | Mix of active, draft, out-of-stock |
+| Products | 5 | Mix of active, draft, out-of-stock (all `approvalStatus: "approved"` for backward compat) |
 | Bank Details | 1 | Commercial Bank of Ceylon demo account |
 | Transactions | 3 | Mix of completed/pending payouts |
 
@@ -1034,7 +1121,7 @@ Pre-seeded in localStorage on first load:
 
 | Shop Slug | Seller | Notes |
 |-----------|--------|-------|
-| `/shop/sarahs-boutique` | sarah.seller | Loads Sarah's seller products |
+| `/shop/sarahs-boutique` | sarah.seller | Loads Sarah's approved active products |
 | `/shop/ammoo-arcade` | — | Sample products |
 | `/shop/tech-haven` | — | Sample products |
 
@@ -1045,7 +1132,7 @@ Pre-seeded in localStorage on first load:
 | Metric | Count |
 |--------|-------|
 | Pages / Routes | 15 |
-| Components | 65+ |
+| Components | 70+ |
 | Context Providers | 3 (Auth, Cart, Notifications) |
 | TypeScript Interfaces | 20+ |
 | Button Variants | 6 component types |
@@ -1053,6 +1140,8 @@ Pre-seeded in localStorage on first load:
 | Seller Dashboard Tabs | 5 (Overview, Profile, Products, Orders, Payouts) |
 | OMS Order Statuses | 7 |
 | Admin Panel Sections | 7 |
+| Product Approval Statuses | 4 (pending, approved, rejected, under_review) |
+| Seller Account Statuses | 3 (active, suspended, banned) |
 | Product Categories | 10+ |
 | Demo Users | 4 |
 | Demo Shops | 3 |
@@ -1073,11 +1162,13 @@ Pre-seeded in localStorage on first load:
 | No database | All data is hardcoded TypeScript or localStorage |
 | No email | Verification pages are UI only — no emails sent |
 | No password hashing | Passwords stored in plaintext in the demo user array |
-| File uploads not server-persisted | Product images converted to dataURL and stored in localStorage; cleared on browser data wipe |
+| File uploads not server-persisted | Product/profile images converted to base64 dataURL and stored in localStorage; cleared on browser data wipe |
 | No real search backend | Search is client-side filter on in-memory array |
 | No real notifications | Buyer notifications are localStorage strings; no push/email/SMS |
+| Tracking notification stub | `sendTrackingNotification()` writes a localStorage record — replace the function body with an AI agent or email API for real notifications |
 | Single demo seller | All checkout orders are assigned to `seller-sarah` regardless of actual product owner |
-| localStorage quota | Uploading many large images may approach 5–10 MB browser storage limit |
+| localStorage quota | Uploading many large images may approach 5–10 MB browser storage limit; base64 is ~33% larger than the original file |
+| Admin access ungated | `/admin` route has no role check in the demo — any logged-in user can navigate to it |
 
 ---
 
@@ -1086,26 +1177,29 @@ Pre-seeded in localStorage on first load:
 ### Customer Journey
 1. Browse `/` home page → hero, featured products, top sellers
 2. Search or filter at `/products` → click product → view detail
-3. Use Fit Finder / Size Guide on product detail page
-4. Add to cart → open `/cart` → **select items** with checkboxes
-5. Proceed to `/checkout` → fill shipping + payment → order confirmed
-6. View order status and timeline in `/profile`
+3. Click **"Visit Store →"** on product detail to browse seller's full shop
+4. Use Fit Finder / Size Guide on product detail page
+5. Add to cart → open `/cart` → **select items** with checkboxes
+6. Proceed to `/checkout` → fill shipping + payment → order confirmed
+7. View order status and timeline in `/profile`
+8. Update profile photo by hovering over avatar and clicking camera icon
 
 ### Seller Journey
 1. Register at `/register` → sign in at `/signin`
 2. Go to `/switch-to-selling` → complete 6-step Shop Wizard (saves progress on refresh)
 3. Access `/seller` dashboard → manage overview, profile, products (with image upload), orders, payouts
-4. Process orders through OMS: pending → processing → packaged → shipped (add tracking number) → completed
-5. Request payouts from wallet; manage bank details
-6. Seller shop visible at `/shop/[id]`
+4. New products start as **Pending** — wait for admin approval before appearing on the shop page
+5. Process orders through OMS: pending → processing → packaged → shipped (**upload handover proof + add tracking number**) → completed
+6. Request payouts from wallet; manage bank details
+7. Seller shop visible at `/shop/[id]` — only approved active products shown
 
 ### Admin Journey
 1. Sign in → navigate to `/admin`
-2. View platform stats (Dashboard)
-3. **Seller Management** — ban/suspend sellers, approve/reject sensitive profile changes, manage payout requests
-4. **Post Management** — approve/reject/mark-under-review seller product listings; rejected posts show comment to seller
-5. **Order Management** — view all platform orders; see tracking IDs and handover proof; mark orders as reviewed
-6. **Customer Management** — view all customers, order history, activity
+2. View platform stats on Dashboard Overview
+3. **Post Management** → review pending products → Approve / Reject (with comment) / Under Review
+4. **Seller Management** → review seller applications, handle ban/suspend, approve sensitive profile changes, process payout requests
+5. **Order Management** → view all platform orders; see "New" badge on unreviewed updates; view tracking IDs and handover proofs
+6. **Customer Management** → view all customer profiles and order histories
 7. Customize website banners and theme
 
 ---

@@ -18,12 +18,12 @@ export default function Header() {
   const { getCartItemCount } = useCart();
   const { isAuthenticated, user } = useAuth();
 
-  const pagesWithoutNavbar = [
+  const noNavbarPrefixes = [
     "/signin", "/register", "/switch-to-selling", "/forgot-password",
     "/email-verification", "/verify-email", "/cart", "/seller", "/profile",
+    "/products/",
   ];
-  const shouldShowNavbar =
-    !pagesWithoutNavbar.includes(pathname) && !pathname.startsWith("/products/");
+  const shouldShowNavbar = !noNavbarPrefixes.some((p) => pathname === p || pathname.startsWith(p));
 
   const cartItemCount = getCartItemCount();
 
