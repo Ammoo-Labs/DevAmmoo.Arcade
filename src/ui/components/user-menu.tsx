@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, LogOut, User, Store, ShieldCheck } from "lucide-react";
+import { ChevronDown, LogOut, User, Store, ShieldCheck, TrendingUp } from "lucide-react";
 import { ActionButton } from "@/ui/components/button";
 import { useAuth } from "@/ui/components/auth/auth-context";
 
@@ -14,8 +14,14 @@ interface UserMenuProps {
 export default function UserMenu({ buttonText = "Welcome" }: UserMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, user, logout, sellerStatus } = useAuth();
   const router = useRouter();
+
+  const sellerLink = !sellerStatus || !sellerStatus.isSeller
+    ? { href: "/switch-to-selling", label: "Become a Seller" }
+    : !sellerStatus.hasShop
+      ? { href: "/switch-to-selling", label: "Continue Seller Setup" }
+      : { href: "/seller", label: "Seller Dashboard" };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -62,20 +68,35 @@ export default function UserMenu({ buttonText = "Welcome" }: UserMenuProps) {
                 </span>
               </div>
 
-              <Link
-                href={user.role === "admin" ? "/admin" : user.role === "seller" ? "/seller" : "/profile"}
-                onClick={() => setIsOpen(false)}
-                className="flex items-center gap-2 w-full text-left px-4 py-2.5 sm:py-2 text-sm hover:bg-gray-100 transition-colors"
-              >
-                {user.role === "admin" ? (
+              {user.role === "admin" ? (
+                <Link
+                  href="/admin"
+                  onClick={() => setIsOpen(false)}
+                  className="flex items-center gap-2 w-full text-left px-4 py-2.5 sm:py-2 text-sm hover:bg-gray-100 transition-colors"
+                >
                   <ShieldCheck className="w-4 h-4" />
-                ) : user.role === "seller" ? (
-                  <Store className="w-4 h-4" />
-                ) : (
-                  <User className="w-4 h-4" />
-                )}
-                {user.role === "admin" ? "Admin Dashboard" : user.role === "seller" ? "Seller Dashboard" : "My Profile"}
-              </Link>
+                  Admin Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/profile"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-2 w-full text-left px-4 py-2.5 sm:py-2 text-sm hover:bg-gray-100 transition-colors"
+                  >
+                    <User className="w-4 h-4" />
+                    My Profile
+                  </Link>
+                  <Link
+                    href={sellerLink.href}
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-2 w-full text-left px-4 py-2.5 sm:py-2 text-sm hover:bg-gray-100 transition-colors"
+                  >
+                    {sellerStatus?.hasShop ? <Store className="w-4 h-4" /> : <TrendingUp className="w-4 h-4" />}
+                    {sellerLink.label}
+                  </Link>
+                </>
+              )}
 
               <hr className="my-1 border-gray-200" />
 
@@ -102,14 +123,6 @@ export default function UserMenu({ buttonText = "Welcome" }: UserMenuProps) {
                 className="block w-full text-left px-4 py-2.5 sm:py-2 text-sm hover:bg-gray-100 transition-colors"
               >
                 Sign In
-              </Link>
-              <hr className="my-1 border-gray-200" />
-              <Link
-                href="/switch-to-selling"
-                onClick={() => setIsOpen(false)}
-                className="block w-full text-left px-4 py-2.5 sm:py-2 text-sm text-blue-600 font-medium hover:bg-gray-100 transition-colors"
-              >
-                Switch to Selling
               </Link>
             </div>
           )}

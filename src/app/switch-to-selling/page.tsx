@@ -8,7 +8,7 @@ import { elevateToSeller } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 
 export default function SwitchToSellingPage() {
-  const { user, accessToken, isAuthenticated, isLoading } = useAuth();
+  const { user, accessToken, isAuthenticated, isLoading, sellerStatus } = useAuth();
   const router = useRouter();
   const [isElevating, setIsElevating] = useState(true);
   const [elevateError, setElevateError] = useState("");
@@ -24,7 +24,12 @@ export default function SwitchToSellingPage() {
       return;
     }
     if (user?.role === "seller") {
-      // Already a seller — nothing to elevate, just show the wizard.
+      if (sellerStatus?.hasShop) {
+        // Onboarding already complete — nothing to resume, go straight to the dashboard.
+        router.push("/seller");
+        return;
+      }
+      // Already a seller but the shop wizard wasn't finished — resume it, nothing to elevate.
       setIsElevating(false);
       return;
     }
@@ -41,7 +46,7 @@ export default function SwitchToSellingPage() {
         setElevateError(err instanceof ApiError ? err.message : "Failed to start seller onboarding. Please try again.");
         setIsElevating(false);
       });
-  }, [isLoading, isAuthenticated, user, accessToken, router]);
+  }, [isLoading, isAuthenticated, user, accessToken, sellerStatus, router]);
 
   if (isLoading || !isAuthenticated || isElevating) {
     return (

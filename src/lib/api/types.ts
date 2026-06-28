@@ -17,6 +17,12 @@ export interface BackendProfile {
   shop?: BackendShopSummary | null;
 }
 
+export interface BackendSellerStatus {
+  isSeller: boolean;
+  hasShop: boolean;
+  shopApprovalStatus: 'pending' | 'approved' | 'rejected' | null;
+}
+
 export interface BackendShopSummary {
   id: string;
   shopName: string;

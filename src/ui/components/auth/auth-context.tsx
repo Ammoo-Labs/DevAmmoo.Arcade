@@ -3,14 +3,16 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { getMe, updateMe, uploadAvatar as apiUploadAvatar } from "@/lib/api/auth";
-import { BackendProfile } from "@/lib/api/types";
+import { getMe, getSellerStatus, updateMe, uploadAvatar as apiUploadAvatar } from "@/lib/api/auth";
+import { BackendProfile, BackendSellerStatus } from "@/lib/api/types";
 
 interface AuthContextType {
   user: BackendProfile | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   accessToken: string | null;
+  sellerStatus: BackendSellerStatus | null;
+  refreshSellerStatus: () => Promise<void>;
   login: (email: string, password: string) => Promise<{ profile: BackendProfile | null; error?: string }>;
   logout: () => Promise<void>;
   signup: (
@@ -28,6 +30,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<BackendProfile | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sellerStatus, setSellerStatus] = useState<BackendSellerStatus | null>(null);
+
+  const refreshSellerStatus = useCallback(async () => {
+    if (!accessToken) {
+      setSellerStatus(null);
+      return;
+    }
+    try {
+      setSellerStatus(await getSellerStatus(accessToken));
+    } catch {
+      // Leave previous value in place — transient failure, not a state change
+    }
+  }, [accessToken]);
 
   const loadProfile = useCallback(async (session: Session): Promise<BackendProfile | null> => {
     setAccessToken(session.access_token);
@@ -36,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Inject email from Supabase session (not stored in Profile table)
       const fullProfile = { ...profile, email: session.user.email ?? "" };
       setUser(fullProfile);
+      getSellerStatus(session.access_token).then(setSellerStatus).catch(() => {});
       return fullProfile;
     } catch {
       // Backend is unreachable or returned an error.
@@ -79,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setUser(null);
           setAccessToken(null);
+          setSellerStatus(null);
         }
         setIsLoading(false);
       },
@@ -100,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setUser(null);
     setAccessToken(null);
+    setSellerStatus(null);
   };
 
   const signup = async (
@@ -141,6 +159,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         isLoading,
         accessToken,
+        sellerStatus,
+        refreshSellerStatus,
         login,
         logout,
         signup,
