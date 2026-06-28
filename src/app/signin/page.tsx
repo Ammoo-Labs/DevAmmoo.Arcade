@@ -21,11 +21,10 @@ export default function SignInPage() {
     rememberMe: false
   });
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (e.g. navigating back to /signin while logged in)
   useEffect(() => {
-    if (isAuthenticated) {
-      const redirectPath = user?.role === 'seller' ? '/seller' : '/';
-      router.push(redirectPath);
+    if (isAuthenticated && user) {
+      router.push(user.role === 'seller' ? '/seller' : '/');
     }
   }, [isAuthenticated, user, router]);
 
@@ -72,14 +71,15 @@ export default function SignInPage() {
     try {
       showInfo("Signing you in...", "Please wait");
       
-      // Use the authentication context to login
-      const success = await login(formData.email, formData.password);
-      
-      if (success) {
-        showSuccess("Welcome back! You have been signed in successfully.", "Sign In Successful");
-        // Redirect will happen automatically via useEffect
-      } else {
+      const { profile, error: authError } = await login(formData.email, formData.password);
+
+      if (authError) {
+        // Supabase rejected the credentials
         showError("Invalid email or password. Please check your credentials and try again.", "Sign In Failed");
+      } else {
+        showSuccess("Welcome back! You have been signed in successfully.", "Sign In Successful");
+        // profile is null if backend is unreachable; fall back to '/' and let role-based routing handle it
+        router.push(profile?.role === 'seller' ? '/seller' : '/');
       }
     } catch (error) {
       console.error("Sign in error:", error);
@@ -200,19 +200,6 @@ export default function SignInPage() {
               </FormButton>
             </div>
           </form>
-
-          {/* Demo Credentials Section */}
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <h4 className="text-sm font-medium text-blue-900 mb-2">Demo Credentials Available</h4>
-            <div className="space-y-2 text-xs text-blue-800">
-              <div>
-                <strong>Customer:</strong> john.customer@example.com / password123
-              </div>
-              <div>
-                <strong>Seller:</strong> sarah.seller@example.com / seller123
-              </div>
-            </div>
-          </div>
 
           <div className="mt-6">
             <div className="relative">

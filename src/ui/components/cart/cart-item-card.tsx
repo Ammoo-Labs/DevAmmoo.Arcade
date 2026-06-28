@@ -8,11 +8,11 @@ import { Minus, Plus, Trash2, Heart } from "lucide-react";
 
 interface CartItemCardProps {
   item: CartItem;
-  onUpdateQuantity: (id: number, quantity: number) => void;
-  onRemove: (id: number) => void;
-  onMoveToWishlist?: (id: number) => void;
+  onUpdateQuantity: (id: string, quantity: number) => void;
+  onRemove: (id: string) => void;
+  onMoveToWishlist?: (id: string) => void;
   isSelected?: boolean;
-  onToggle?: (id: number) => void;
+  onToggle?: (id: string) => void;
 }
 
 export default function CartItemCard({

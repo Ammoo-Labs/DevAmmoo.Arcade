@@ -6,34 +6,37 @@ import Link from "next/link";
 import { ArrowLeft, CreditCard, Truck, CheckCircle } from "lucide-react";
 import { ActionButton } from "@/ui/components/button";
 import { useCart } from "@/ui/components/cart";
-import { addOrder, SellerOrder } from "@/ui/components/seller-dashboard/seller-store";
+import { useAuth } from "@/ui/components/auth/auth-context";
+import { createOrder } from "@/lib/api/orders";
 
 type Step = "details" | "payment" | "confirmation";
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { cartItems, removeFromCart, clearCart } = useCart();
+  const { cartItems, removeFromCart, clearCart, refreshCart } = useCart();
+  const { accessToken, user } = useAuth();
   const [step, setStep] = useState<Step>("details");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [confirmedOrderId, setConfirmedOrderId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    address: "",
-    city: "",
-    postalCode: "",
+    firstName: user?.name?.split(" ")[0] ?? "",
+    lastName: user?.name?.split(" ").slice(1).join(" ") ?? "",
+    email: user?.email ?? "",
+    address: user?.address ?? "",
+    city: user?.city ?? "",
+    postalCode: user?.postalCode ?? "",
     country: "Sri Lanka",
     cardNumber: "",
     cardExpiry: "",
     cardCvc: "",
   });
 
-  // Read selected IDs from sessionStorage (set by cart page)
   const selectedItems = useMemo(() => {
     try {
       const raw = sessionStorage.getItem("ammoo-checkout-selected");
       if (!raw) return cartItems;
-      const ids: number[] = JSON.parse(raw);
+      const ids: string[] = JSON.parse(raw);
       if (!ids.length) return cartItems;
       const idSet = new Set(ids);
       return cartItems.filter((i) => idSet.has(i.id));
@@ -52,49 +55,33 @@ export default function CheckoutPage() {
   };
 
   const handlePlaceOrder = async () => {
-    setIsProcessing(true);
-    await new Promise((resolve) => setTimeout(resolve, 1800));
-
-    // Persist order in the seller store so it appears in the seller's OMS
-    const orderId = `ORD-${Date.now()}`;
-    const order: SellerOrder = {
-      id: orderId,
-      sellerId: "seller-sarah", // default demo seller owns all products
-      customer: {
-        name: `${formData.firstName} ${formData.lastName}`.trim() || "Guest",
-        email: formData.email || "guest@example.com",
-      },
-      products: selectedItems.map((item) => ({
-        name: item.name,
-        image: typeof item.image === "string" ? item.image : "",
-        quantity: item.quantity,
-        price: item.price,
-        size: item.size,
-        color: item.color,
-      })),
-      total,
-      subtotal,
-      tax,
-      shipping,
-      status: "pending",
-      paymentStatus: "paid",
-      orderDate: new Date().toISOString().split("T")[0],
-      shippingAddress: [formData.address, formData.city, formData.postalCode, formData.country]
-        .filter(Boolean)
-        .join(", "),
-      statusHistory: [{ status: "pending", timestamp: new Date().toISOString() }],
-    };
-    addOrder(order);
-
-    // Remove only selected items from cart; clear sessionStorage key
-    sessionStorage.removeItem("ammoo-checkout-selected");
-    if (selectedItems.length === cartItems.length) {
-      clearCart();
-    } else {
-      for (const item of selectedItems) removeFromCart(item.id);
+    if (!accessToken) {
+      setErrorMsg("You must be signed in to place an order.");
+      return;
     }
-    setStep("confirmation");
-    setIsProcessing(false);
+    setIsProcessing(true);
+    setErrorMsg(null);
+    try {
+      const order = await createOrder(accessToken, {
+        cartItemIds: selectedItems.map((i) => i.id),
+        customerName: `${formData.firstName} ${formData.lastName}`.trim() || user?.name || "Guest",
+        customerEmail: formData.email || user?.email || "",
+        address: formData.address,
+        city: formData.city,
+        postalCode: formData.postalCode || undefined,
+        country: formData.country || undefined,
+      });
+
+      sessionStorage.removeItem("ammoo-checkout-selected");
+      await refreshCart();
+      setConfirmedOrderId(order.id);
+      setStep("confirmation");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to place order. Please try again.";
+      setErrorMsg(msg);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   if (selectedItems.length === 0 && step !== "confirmation") {
@@ -121,9 +108,9 @@ export default function CheckoutPage() {
           <p className="text-gray-600 mb-2">
             Thank you for your order. We&apos;ve received your order and will send a confirmation email shortly.
           </p>
-          <p className="text-sm text-gray-500 mb-8">
-            Order #{Math.random().toString(36).substring(2, 10).toUpperCase()}
-          </p>
+          {confirmedOrderId && (
+            <p className="text-sm text-gray-500 mb-8">Order #{confirmedOrderId.slice(-8).toUpperCase()}</p>
+          )}
           <div className="space-y-3">
             <Link href="/products">
               <ActionButton size="lg" className="w-full">Continue Shopping</ActionButton>
@@ -140,7 +127,6 @@ export default function CheckoutPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Breadcrumb */}
         <nav className="flex items-center space-x-2 text-sm text-gray-600 mb-6">
           <Link href="/" className="hover:text-gray-900">Home</Link>
           <span>/</span>
@@ -159,7 +145,6 @@ export default function CheckoutPage() {
 
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-8">Checkout</h1>
 
-        {/* Step Indicator */}
         <div className="flex items-center gap-4 mb-8">
           {(["details", "payment"] as Step[]).map((s, i) => (
             <div key={s} className="flex items-center gap-2">
@@ -179,7 +164,6 @@ export default function CheckoutPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Form */}
           <div className="lg:col-span-2 space-y-6">
             {step === "details" && (
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
@@ -312,6 +296,12 @@ export default function CheckoutPage() {
                     This is a demo checkout. No real payment will be processed.
                   </p>
                 </div>
+
+                {errorMsg && (
+                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-700">{errorMsg}</p>
+                  </div>
+                )}
 
                 <div className="flex gap-3 mt-6">
                   <ActionButton

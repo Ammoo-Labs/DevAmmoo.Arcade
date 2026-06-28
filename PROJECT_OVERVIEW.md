@@ -162,14 +162,21 @@ ammoo_arcade/
 │   │       │   ├── orders/orders.tsx         # Full OMS with 7-state flow
 │   │       │   └── payouts/payouts.tsx       # Wallet, withdrawals, bank details
 │   │       ├── userprofile/
+│   │       │   ├── profile-header.tsx
+│   │       │   ├── account-status.tsx
+│   │       │   ├── followed-shops.tsx
 │   │       │   └── quick-actions.tsx
 │   │       └── admin/
 │   │           ├── admin-sidebar.tsx
 │   │           ├── dashboard-overview.tsx
 │   │           ├── user-management.tsx
 │   │           ├── seller-management.tsx
+│   │           ├── post-management.tsx
+│   │           ├── order-management.tsx
+│   │           ├── customer-management.tsx
 │   │           ├── customize-website.tsx
-│   │           └── banner-form-modal.tsx
+│   │           ├── banner-form-modal.tsx
+│   │           └── banner-image-input.tsx
 │   │
 │   ├── assets/images/
 │   │   ├── hero-image.png
@@ -224,12 +231,14 @@ ammoo_arcade/
 - Protected routes redirect to `/signin`
 - **Logout always redirects to home page** (`/`) — applies from header menu, profile page, and seller dashboard
 
-**Demo Credentials:**
+**Demo Credentials (see Section 14 for full user list):**
 
 | Role | Email | Password |
 |------|-------|----------|
 | Customer | john.customer@example.com | password123 |
-| Seller | sarah.seller@example.com | seller123 |
+| Seller (Sarah) | sarah.seller@example.com | seller123 |
+| Seller (Tech) | contact@techgadgets.com | tech123 |
+| Seller (Artisan) | hello@artisancrafts.com | craft123 |
 
 ---
 
@@ -329,8 +338,8 @@ A 6-step guided wizard for new sellers:
 
 | Step | Content |
 |------|---------|
-| 1 | Shop name, tagline, description |
-| 2 | Profile picture (circle crop), cover photo (banner crop), ID photo upload |
+| 1 | Shop name only (3–50 characters, validated) |
+| 2 | Profile picture (circle crop), cover photo (banner crop), ID photo upload (with ID type and ID number) |
 | 3 | Contact info — NIC number, telephone, address |
 | 4 | Social media links — Facebook, Instagram, Twitter, website URL |
 | 5 | First product listing — name, category, price, description, front + back + gallery images |
@@ -365,7 +374,7 @@ Accessible only to users with `role: "seller"`. Collapsible sidebar on desktop, 
 - Add / edit / delete products via modal forms
 - **Real image upload** — file selected → converted to dataURL via `FileReader` → stored in localStorage and displayed on cards
 - Drag-and-drop upload zone with preview and "Remove image" option
-- Fields: name, description, category, price, original price, stock, status (active/draft/out-of-stock), tags
+- Fields: name, description, category, price, original price, stock, status (active/inactive/draft), tags
 - Stats strip: Total / Active / Out of Stock counts
 
 ---
@@ -436,7 +445,7 @@ pending → on_hold → processing → packaged → shipped → completed
 - Shop stats — products count, followers, star rating
 - **Follow / Unfollow** button
 - 3 navigation tabs: Products | Shipping Info | Returns & Exchanges
-- **Seller-aware product loading** — maps shop slug → seller ID via `SHOP_SELLER_MAP`; loads that seller's active products from `seller-store.ts`; falls back to sample products if none found
+- **Seller-aware product loading** — first checks `HARDCODED_SELLER_MAP` (maps slug → sellerId for demo shops), then dynamically looks up sellers by user ID or shop-name slug; loads that seller's `active + approved` products from `seller-store.ts`; falls back to up to 8 sample products if none found
 - Product cards show seeded picsum images when seller products have no uploaded image
 - Dynamic theme colors per shop (`shop-colors.ts`)
 
@@ -575,6 +584,15 @@ Fixed left sidebar with 7 sections:
 | `CustomerManagement` | All customers with order history and activity |
 | `CustomizeWebsite` | Banner list and theme editor |
 | `BannerFormModal` | Create/edit banner modal |
+| `BannerImageInput` | File input with live preview and remove for banner images |
+
+### User Profile
+| Component | Purpose |
+|-----------|---------|
+| `ProfileHeader` | Avatar, verified badge, Back to Shop / Logout buttons |
+| `AccountStatus` | 4-stat grid: wishlist count, orders, member since, followed shops |
+| `FollowedShops` | Lists shops the user follows (resolved from user IDs in `followedShops` array) |
+| `QuickActions` | Browse Products, View Cart, Wishlist shortcut links |
 
 ### Utilities
 | Component | Purpose |
@@ -599,8 +617,6 @@ interface User {
   profileImage?: string;
   phone?: string;
   address?: string;
-  city?: string;
-  postalCode?: string;
   isVerified: boolean;
   createdAt: string;
   shopName?: string;
@@ -609,6 +625,8 @@ interface User {
   followedShops?: string[];
 }
 ```
+
+> **Note:** `city` and `postalCode` are not on the `User` interface. They are stored in `ammoo-user-overrides` via `UserProfileOverride` and merged at runtime via `(user as any).postalCode`.
 
 ### Product (Buyer-facing)
 
@@ -622,12 +640,13 @@ interface Product {
   rating: number;
   reviews: number;
   image: string | StaticImageData;
-  image2?: string;
+  image2?: string | StaticImageData;
   category: string;
   description?: string;
   isNew?: boolean;
   isLiked?: boolean;
   inStock?: boolean;
+  discount?: number;
   store?: string;
   tags?: string[];
 }
@@ -647,12 +666,11 @@ interface SellerProduct {
   price: number;
   originalPrice?: number;
   stock: number;
-  status: "active" | "draft" | "out-of-stock";
+  status: "active" | "inactive" | "draft";  // "inactive" = out-of-stock/hidden
   image: string;        // dataURL from FileReader or picsum URL
-  tags: string[];
+  tags?: string[];
   createdAt: string;
   sales: number;
-  revenue: number;
   approvalStatus: PostApprovalStatus;   // new/edited products default to "pending"
   rejectionComment?: string;            // set by admin when rejecting
 }
@@ -678,7 +696,7 @@ interface SellerOrder {
   tax: number;
   shipping: number;
   status: OrderStatus;
-  paymentStatus: "paid" | "refunded" | "pending";
+  paymentStatus: "paid" | "pending" | "failed";
   orderDate: string;
   shippingAddress: string;
   trackingNumber?: string;
@@ -701,17 +719,37 @@ type SellerAccountStatus = "active" | "suspended" | "banned";
 
 interface SellerProfile {
   sellerId: string;
-  shopName: string;
-  description: string;
+  shopName?: string;
+  shopDescription?: string;
   profileImage?: string;
   bannerImage?: string;
-  email: string;
-  phone: string;
-  address: string;
+  email?: string;
+  phone?: string;
+  address?: string;
   courierService?: string;       // preferred courier (e.g. Koombiyo, DHL)
-  socialLinks?: { facebook?: string; instagram?: string; twitter?: string; website?: string };
-  pendingProfileChanges?: Partial<SellerProfile>;  // set when sensitive fields change
-  profileChangeStatus?: "pending" | "approved" | "rejected";
+  socialLinks?: {
+    facebook?: string;
+    instagram?: string;
+    twitter?: string;
+    youtube?: string;
+    tiktok?: string;
+  };
+  // Shop contact & policy fields
+  shopAddress?: string;
+  shopEmail?: string;
+  shopPhone?: string;
+  returnPolicy?: string;
+  returnableitems?: string;
+  nonReturnableItems?: string;
+  exchangePolicy?: string;
+  exchangeConditions?: string;
+  returnSteps?: string;
+  refundInfo?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  // Sensitive-field change approval
+  pendingProfileChanges?: Partial<SellerProfile>;
+  profileChangeStatus?: "none" | "pending";  // "none" = no pending changes
 }
 ```
 
@@ -721,9 +759,12 @@ interface SellerProfile {
 interface PayoutRequest {
   id: string;
   sellerId: string;
+  sellerName: string;
+  shopName: string;
   amount: number;
-  requestedAt: string;
+  requestDate: string;
   status: "pending" | "approved" | "rejected";
+  bankDetails?: Partial<BankDetails>;
   adminNote?: string;
 }
 ```
@@ -737,7 +778,7 @@ interface CartItem {
   name: string;
   creator: string;
   price: number;
-  originalPrice?: number;
+  originalPrice?: number | null;
   image: string;
   quantity: number;
   size?: string;
@@ -756,7 +797,7 @@ interface BankDetails {
   accountNumber: string;
   routingNumber: string;
   accountType: "checking" | "savings";
-  iban: string;
+  iban?: string;
 }
 ```
 
@@ -778,18 +819,38 @@ interface PayoutTransaction {
 interface BuyerNotification {
   id: string;
   orderId: string;
+  buyerEmail: string;
   message: string;
   timestamp: string;
   read: boolean;
-  buyerEmail?: string;
+  type: "shipped" | "cancelled" | "on_hold" | "processing" | "completed" | "general";
 }
 ```
+
+### UserProfileOverride
+
+```typescript
+interface UserProfileOverride {
+  profileImage?: string;
+  phone?: string;
+  address?: string;
+  postalCode?: string;
+  city?: string;
+  name?: string;
+}
+```
+
+Stored in `ammoo-user-overrides` keyed by userId. Merged onto the static `User` object at login and hydration, providing editable profile fields that aren't in the hardcoded user array.
 
 ---
 
 ## 8. State Management & Persistence
 
 All runtime state uses **React Context API** — no Redux, no Zustand.
+
+**Provider nesting:**
+- `CartProvider` — mounted in `src/app/layout.tsx` (root, wraps everything)
+- `AuthProvider` + `NotificationProvider` — mounted inside `src/ui/layout/main-layout.tsx` (nested under CartProvider)
 
 ### AuthContext
 
@@ -835,10 +896,13 @@ Hook:     useNotifications()
 
 | Method | Description |
 |--------|-------------|
-| `showSuccess(message, title?)` | Green success toast |
-| `showError(message, title?)` | Red error toast |
-| `showWarning(message, title?)` | Yellow warning toast |
-| `showInfo(message, title?)` | Blue info toast |
+| `showSuccess(message, title?)` | Green success toast — auto-dismisses after 5 s |
+| `showError(message, title?)` | Red error toast — **does not auto-dismiss** (`autoClose: false`) |
+| `showWarning(message, title?)` | Yellow warning toast — auto-dismisses after 5 s |
+| `showInfo(message, title?)` | Blue info toast — auto-dismisses after 5 s |
+| `showNotification(props)` | Raw notification — caller controls type and autoClose |
+| `removeNotification(id)` | Dismiss a specific toast by ID |
+| `clearAllNotifications()` | Dismiss all visible toasts |
 
 ### localStorage Keys
 
@@ -875,10 +939,10 @@ Hook:     useNotifications()
 | Name | Duration | Behavior |
 |------|----------|----------|
 | `scroll` | 30s linear infinite | Horizontal auto-scroll (marquee) |
-| `float` | 3s ease-in-out infinite | Gentle vertical bob |
-| `float-slow` | 5s ease-in-out infinite | Slow vertical bob |
-| `float-fast` | 2s ease-in-out infinite | Fast vertical bob |
-| `float-very-fast` | 1.5s ease-in-out infinite | Very fast bob |
+| `float` | 6s ease-in-out infinite | Gentle vertical bob (±20 px) |
+| `float-slow` | 8s ease-in-out infinite | Slow vertical bob (±30 px) |
+| `float-fast` | 4s ease-in-out infinite | Fast vertical bob (±15 px) |
+| `float-very-fast` | 2s ease-in-out infinite | Very fast vertical bob (±10 px) |
 
 ### Color Palette
 
@@ -954,10 +1018,14 @@ Mobile-first approach using Tailwind breakpoints:
 ### `next.config.ts`
 
 ```typescript
+const isProd = process.env.NODE_ENV === "production";
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 {
   output: "export",           // Static site generation
   trailingSlash: true,        // /products/ not /products
-  basePath: process.env.NEXT_PUBLIC_BASE_PATH || "",
+  basePath,
+  assetPrefix: basePath ? `${basePath}/` : "",   // Needed for correct asset paths on sub-path hosts
   images: {
     unoptimized: true         // Required for static export + external image URLs
   }
@@ -1005,12 +1073,12 @@ Mobile-first approach using Tailwind breakpoints:
 
 ### Users (`src/data/users.ts`)
 
-| Name | Email | Password | Role |
-|------|-------|----------|------|
-| John Customer | john.customer@example.com | password123 | customer |
-| Jane Smith | jane.smith@example.com | password123 | customer |
-| Sarah Seller | sarah.seller@example.com | seller123 | seller |
-| Mike Maker | mike.maker@example.com | seller123 | seller |
+| Name | Email | Password | Role | ID |
+|------|-------|----------|------|----|
+| John Doe | john.customer@example.com | password123 | customer | user_001 |
+| Sarah Johnson | sarah.seller@example.com | seller123 | seller | user_002 |
+| Tech Gadgets Pro | contact@techgadgets.com | tech123 | seller | shop_003 |
+| Artisan Crafts | hello@artisancrafts.com | craft123 | seller | shop_004 |
 
 ### Seller Demo Data (`seller-store.ts`)
 
@@ -1018,10 +1086,10 @@ Pre-seeded in localStorage on first load:
 
 | Category | Count | Details |
 |----------|-------|---------|
-| Orders | 7 | One in each status (pending → cancelled) |
-| Products | 5 | Mix of active, draft, out-of-stock |
-| Bank Details | 1 | Commercial Bank of Ceylon demo account |
-| Transactions | 3 | Mix of completed/pending payouts |
+| Orders | 7 | One in each status (pending → cancelled); all for seller-sarah |
+| Products | 5 | 3 active (approved), 1 inactive (approved), 1 draft (pending approval) |
+| Bank Details | 1 | Commercial Bank of Ceylon demo account (Sarah Silva) |
+| Transactions | 3 | All status "completed" — bank transfer payouts |
 
 ### Product Catalog
 
@@ -1032,11 +1100,11 @@ Pre-seeded in localStorage on first load:
 
 ### Shop Pages
 
-| Shop Slug | Seller | Notes |
-|-----------|--------|-------|
-| `/shop/sarahs-boutique` | sarah.seller | Loads Sarah's seller products |
-| `/shop/ammoo-arcade` | — | Sample products |
-| `/shop/tech-haven` | — | Sample products |
+| Shop Slug | Seller ID | Notes |
+|-----------|-----------|-------|
+| `/shop/sarahs-boutique` | seller-sarah | Loads Sarah's active+approved products from localStorage |
+| `/shop/ammoo-arcade` | — | Hardcoded; falls back to 8 sample products |
+| `/shop/tech-haven` | — | Hardcoded; falls back to 8 sample products |
 
 ---
 
@@ -1045,23 +1113,25 @@ Pre-seeded in localStorage on first load:
 | Metric | Count |
 |--------|-------|
 | Pages / Routes | 15 |
-| Components | 65+ |
+| UI Component files (`src/ui/`) | 59 |
+| App page files (`src/app/`) | 18 |
 | Context Providers | 3 (Auth, Cart, Notifications) |
-| TypeScript Interfaces | 20+ |
+| TypeScript Interfaces / Types | 20+ |
 | Button Variants | 6 component types |
 | Seller Wizard Steps | 6 |
 | Seller Dashboard Tabs | 5 (Overview, Profile, Products, Orders, Payouts) |
 | OMS Order Statuses | 7 |
 | Admin Panel Sections | 7 |
-| Product Categories | 10+ |
+| Product Filter Categories | 10 (including "All") |
 | Demo Users | 4 |
 | Demo Shops | 3 |
 | Demo Orders | 7 |
 | Demo Products | 12 catalog + 5 seller |
 | localStorage Keys | 13 |
 | Custom Tailwind Animations | 5 |
-| npm Dependencies | 4 |
-| Estimated Lines of Code | 18,000+ |
+| Production npm Dependencies | 4 |
+| Dev Dependencies | 8 |
+| Estimated Lines of Code | <!-- TODO: verify --> ~18,000+ |
 
 ---
 
@@ -1111,4 +1181,4 @@ Pre-seeded in localStorage on first load:
 ---
 
 *AMMOO ARCADE — Next.js 15 | React 19 | TypeScript | Tailwind CSS | Static Export*
-*Last updated: June 2026*
+*Last updated: June 9, 2026*

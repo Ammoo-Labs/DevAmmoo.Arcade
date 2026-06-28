@@ -2,8 +2,8 @@ import { CartItem } from "./types";
 
 export const sampleCartItems: CartItem[] = [
   {
-    id: 1,
-    productId: 1,
+    id: "00000000-0000-0000-0000-000000000001",
+    productId: "00000000-0000-0000-0000-000000000101",
     name: "Vintage Leather Jacket",
     creator: "John Smith",
     price: 129.99,
@@ -13,11 +13,11 @@ export const sampleCartItems: CartItem[] = [
     size: "M",
     color: "Brown",
     store: "Fashion Forward",
-    inStock: true
+    inStock: true,
   },
   {
-    id: 2,
-    productId: 3,
+    id: "00000000-0000-0000-0000-000000000002",
+    productId: "00000000-0000-0000-0000-000000000103",
     name: "Handcrafted Silver Ring",
     creator: "Alice Johnson",
     price: 89.99,
@@ -26,31 +26,6 @@ export const sampleCartItems: CartItem[] = [
     quantity: 2,
     size: "7",
     store: "Jewelry Plus",
-    inStock: true
+    inStock: true,
   },
-  {
-    id: 3,
-    productId: 8,
-    name: "Premium Backpack",
-    creator: "James Wilson",
-    price: 149.99,
-    originalPrice: null,
-    image: "https://picsum.photos/seed/cart-item/300/400",
-    quantity: 1,
-    color: "Black",
-    store: "Travel Gear Pro",
-    inStock: true
-  },
-  {
-    id: 4,
-    productId: 11,
-    name: "Designer Sunglasses",
-    creator: "Elena Fashions",
-    price: 179.99,
-    originalPrice: 229.99,
-    image: "https://picsum.photos/seed/cart-item/300/400",
-    quantity: 1,
-    store: "Style Studio",
-    inStock: false
-  }
 ];

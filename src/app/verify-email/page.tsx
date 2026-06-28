@@ -1,31 +1,45 @@
 "use client";
 import { useEffect, useState, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { CheckCircle, XCircle, Loader } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 function VerifyEmailContent() {
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
-  const searchParams = useSearchParams();
-  const token = searchParams.get("token");
+  const router = useRouter();
 
   useEffect(() => {
-    if (!token) {
-      setStatus("error");
-      setErrorMessage("Invalid verification link. Token is missing.");
-      return;
-    }
-    const timer = setTimeout(() => {
-      if (token === "invalid") {
-        setStatus("error");
-        setErrorMessage("Invalid or expired verification link.");
-      } else {
+    // Supabase processes the token from the URL hash automatically when
+    // detectSessionInUrl is true. We listen for the resulting auth event.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) {
         setStatus("success");
+        // Redirect to home after a short delay so the user can see the success message
+        setTimeout(() => router.push("/"), 2500);
+      } else if (event === "TOKEN_REFRESHED") {
+        setStatus("success");
+        setTimeout(() => router.push("/"), 2500);
       }
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [token]);
+    });
+
+    // Fallback: if no auth event fires within 8 seconds, the link is invalid/expired
+    const timeout = setTimeout(() => {
+      setStatus((prev) => {
+        if (prev === "loading") {
+          setErrorMessage("The verification link is invalid or has expired. Please request a new one.");
+          return "error";
+        }
+        return prev;
+      });
+    }, 8000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
+  }, [router]);
 
   if (status === "loading") {
     return (
@@ -75,6 +89,7 @@ function VerifyEmailContent() {
         <p className="mt-2 text-sm text-gray-600">
           Your email has been verified. Your account is now active and ready to use.
         </p>
+        <p className="mt-1 text-sm text-gray-400">Redirecting you to the home page...</p>
       </div>
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10 space-y-3">

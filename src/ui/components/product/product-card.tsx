@@ -26,7 +26,14 @@ export default function ProductCard({
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    addToCart(product);
+    addToCart({
+      id: String(product.id),
+      name: product.name,
+      price: product.price,
+      originalPrice: product.originalPrice,
+      images: [typeof product.image === "string" ? product.image : ""],
+      shopName: product.store,
+    });
     onAddToCart?.(product.id);
   };
 

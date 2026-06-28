@@ -3,20 +3,27 @@ import { useState, Suspense } from "react";
 import Link from "next/link";
 import { RotateCcw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 function EmailVerificationContent() {
   const [isResending, setIsResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
+  const [resendError, setResendError] = useState("");
   const searchParams = useSearchParams();
-  const email = searchParams.get("email") || "your email";
+  const email = searchParams.get("email") || "";
 
   const handleResendEmail = async () => {
+    if (!email) return;
     setIsResending(true);
-    setTimeout(() => {
-      setIsResending(false);
+    setResendError("");
+    const { error } = await supabase.auth.resend({ type: "signup", email });
+    setIsResending(false);
+    if (error) {
+      setResendError(error.message);
+    } else {
       setResendSuccess(true);
-      setTimeout(() => setResendSuccess(false), 3000);
-    }, 2000);
+      setTimeout(() => setResendSuccess(false), 4000);
+    }
   };
 
   return (
@@ -25,7 +32,7 @@ function EmailVerificationContent() {
         <div className="text-center">
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">Check your email</h2>
           <p className="mt-2 text-sm text-gray-600">We&apos;ve sent a verification link to</p>
-          <p className="text-sm font-medium text-gray-900 break-all">{email}</p>
+          <p className="text-sm font-medium text-gray-900 break-all">{email || "your email address"}</p>
         </div>
       </div>
 
@@ -41,6 +48,11 @@ function EmailVerificationContent() {
               {resendSuccess && (
                 <div className="bg-green-50 border border-green-200 rounded-md p-3 mb-4">
                   <p className="text-sm text-green-800">✓ Verification email sent successfully!</p>
+                </div>
+              )}
+              {resendError && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
+                  <p className="text-sm text-red-800">{resendError}</p>
                 </div>
               )}
 

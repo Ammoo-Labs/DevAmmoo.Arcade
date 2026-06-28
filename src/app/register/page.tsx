@@ -6,6 +6,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { useNotifications } from "@/ui/components/notifications";
 import InlineNotification from "@/ui/components/notifications/inline-notification";
 import { FormButton, IconButton } from "@/ui/components/button";
+import { useAuth } from "@/ui/components/auth/auth-context";
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -14,6 +15,7 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const router = useRouter();
   const { showSuccess, showError, showInfo } = useNotifications();
+  const { signup } = useAuth();
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -92,16 +94,14 @@ export default function RegisterPage() {
     setIsLoading(true);
     
     try {
-      // Simulate registration API call
-      console.log("Registration attempt:", formData);
-      
       showInfo("Creating your account...", "Processing");
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      showSuccess("Account created successfully! Please check your email for verification.", "Welcome to AMMOO.ARCADE!");
-
+      const fullName = `${formData.firstName.trim()} ${formData.lastName.trim()}`.trim();
+      const result = await signup(formData.email, formData.password, fullName);
+      if (result.error) {
+        showError(result.error, "Registration Failed");
+        return;
+      }
+      showSuccess("Account created! Please check your email for a verification link.", "Welcome to AMMOO.ARCADE!");
       setTimeout(() => {
         router.push(`/email-verification?email=${encodeURIComponent(formData.email)}`);
       }, 1500);

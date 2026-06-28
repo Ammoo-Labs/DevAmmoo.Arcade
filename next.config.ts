@@ -1,15 +1,19 @@
 import type { NextConfig } from "next";
 
-const isProd = process.env.NODE_ENV === "production";
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
-
 const nextConfig: NextConfig = {
-  output: "export",
-  trailingSlash: true,
-  basePath,
-  assetPrefix: basePath ? `${basePath}/` : "",
   images: {
-    unoptimized: true,
+    // Allow Supabase Storage image domains in addition to local images
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "*.supabase.co",
+        pathname: "/storage/v1/object/public/**",
+      },
+      {
+        protocol: "https",
+        hostname: "picsum.photos",
+      },
+    ],
   },
 };
 

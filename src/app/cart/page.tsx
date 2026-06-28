@@ -11,29 +11,21 @@ export default function CartPage() {
   const router = useRouter();
   const { cartItems, updateQuantity, removeFromCart, clearCart, getCartItemCount } = useCart();
 
-  // Selection state — default all selected
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // Selection state — default all selected; string UUIDs now
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Sync selectedIds when cartItems change (e.g. item removed, initial load)
   useEffect(() => {
     setSelectedIds((prev) => {
       const currentIds = new Set(cartItems.map((i) => i.id));
-      // Keep existing selections that are still in cart; add new items as selected
-      const next = new Set<number>();
-      for (const id of currentIds) {
-        next.add(prev.has(id) ? id : id); // preserve existing, add new
-      }
-      // Remove IDs no longer in cart
-      for (const id of prev) {
-        if (!currentIds.has(id)) next.delete(id);
-      }
-      // If this is first render (prev empty), select all
+      const next = new Set<string>();
+      for (const id of currentIds) next.add(id);
+      for (const id of prev) if (!currentIds.has(id)) next.delete(id);
       if (prev.size === 0) return currentIds;
       return next;
     });
   }, [cartItems]);
 
-  const toggleItem = (id: number) => {
+  const toggleItem = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -46,16 +38,12 @@ export default function CartPage() {
   const someSelected = selectedIds.size > 0 && selectedIds.size < cartItems.length;
 
   const toggleAll = () => {
-    if (allSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(cartItems.map((i) => i.id)));
-    }
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(cartItems.map((i) => i.id)));
   };
 
   const selectedItems = cartItems.filter((i) => selectedIds.has(i.id));
 
-  // Calculate cart summary for SELECTED items only
   const cartSummary = useMemo((): CartSummary => {
     const subtotal = selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const totalOriginalPrice = selectedItems.reduce((sum, item) => {
@@ -66,30 +54,19 @@ export default function CartPage() {
     const shipping = subtotal > 50 ? 0 : selectedItems.length > 0 ? 9.99 : 0;
     const tax = subtotal * 0.08;
     const total = subtotal + shipping + tax;
-
-    return {
-      subtotal,
-      shipping,
-      tax,
-      total,
-      savings: savings > 0 ? savings : undefined,
-    };
+    return { subtotal, shipping, tax, total, savings: savings > 0 ? savings : undefined };
   }, [selectedItems]);
 
   const itemCount = getCartItemCount();
 
-  const handleUpdateQuantity = (id: number, quantity: number) => updateQuantity(id, quantity);
-  const handleRemoveItem = (id: number) => removeFromCart(id);
-  const handleMoveToWishlist = (id: number) => handleRemoveItem(id);
+  const handleUpdateQuantity = (id: string, quantity: number) => updateQuantity(id, quantity);
+  const handleRemoveItem = (id: string) => removeFromCart(id);
+  const handleMoveToWishlist = (id: string) => handleRemoveItem(id);
 
   const handleCheckout = () => {
-    // Persist selected IDs so checkout page knows which items to process
     sessionStorage.setItem("ammoo-checkout-selected", JSON.stringify([...selectedIds]));
     router.push("/checkout");
   };
-
-  const handleContinueShopping = () => router.push("/products");
-  const handleClearCart = () => clearCart();
 
   if (cartItems.length === 0) {
     return (
@@ -106,9 +83,9 @@ export default function CartPage() {
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-4">Your cart is empty</h1>
             <p className="text-lg text-gray-600 mb-8 max-w-md mx-auto">
-              Looks like you haven't added any items to your cart yet. Start exploring our amazing products!
+              Looks like you haven&apos;t added any items to your cart yet. Start exploring our amazing products!
             </p>
-            <ActionButton onClick={handleContinueShopping} size="lg">
+            <ActionButton onClick={() => router.push("/products")} size="lg">
               <Package className="w-5 h-5 mr-2" />
               Start Shopping
             </ActionButton>
@@ -121,14 +98,12 @@ export default function CartPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Breadcrumb */}
         <nav className="flex items-center space-x-2 text-sm text-gray-600 mb-8">
           <Link href="/" className="hover:text-gray-900">Home</Link>
           <span>/</span>
           <span className="text-gray-900 font-medium">Shopping Cart</span>
         </nav>
 
-        {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
           <div>
             <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Shopping Cart</h1>
@@ -143,7 +118,7 @@ export default function CartPage() {
             </ActionButton>
             {cartItems.length > 0 && (
               <ActionButton
-                onClick={handleClearCart}
+                onClick={() => clearCart()}
                 variant="secondary"
                 size="md"
                 className="text-red-600 border-red-600 hover:bg-red-600 hover:text-white"
@@ -154,11 +129,8 @@ export default function CartPage() {
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="lg:grid lg:grid-cols-3 lg:gap-8">
-          {/* Cart Items */}
           <div className="lg:col-span-2">
-            {/* Select All row */}
             <div className="flex items-center gap-3 mb-3 px-1">
               <input
                 type="checkbox"
@@ -186,7 +158,6 @@ export default function CartPage() {
               ))}
             </div>
 
-            {/* Recommendations */}
             <div className="mt-12">
               <h2 className="text-xl font-semibold text-gray-900 mb-6">You might also like</h2>
               <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
@@ -198,14 +169,13 @@ export default function CartPage() {
             </div>
           </div>
 
-          {/* Cart Summary */}
           <div className="mt-8 lg:mt-0">
             <CartSummaryCard
               summary={cartSummary}
               itemCount={itemCount}
               selectedCount={selectedIds.size}
               onCheckout={handleCheckout}
-              onContinueShopping={handleContinueShopping}
+              onContinueShopping={() => router.push("/products")}
             />
           </div>
         </div>

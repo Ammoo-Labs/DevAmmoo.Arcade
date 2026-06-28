@@ -44,8 +44,22 @@ export default function SellerDashboard() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
-  const { logout } = useAuth();
+  const { logout, user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (!isAuthenticated) { router.push("/signin"); return; }
+    if (user?.role !== "seller") router.push("/");
+  }, [isAuthenticated, user, isLoading, router]);
+
+  if (isLoading || !isAuthenticated || user?.role !== "seller") {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+      </div>
+    );
+  }
 
   const handleLogout = () => {
     logout();

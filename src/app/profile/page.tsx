@@ -56,12 +56,14 @@ interface ProfileForm {
 }
 
 export default function ProfilePage() {
-  const { user, isAuthenticated, logout, updateUser } = useAuth();
+  const { user, isAuthenticated, logout, updateUser, uploadAvatar } = useAuth();
   const router = useRouter();
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState("");
   const [form, setForm] = useState<ProfileForm>({
     name: "", email: "", phone: "", address: "", postalCode: "", city: "",
   });
@@ -87,28 +89,36 @@ export default function ProfilePage() {
     }
   }, [user]);
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string;
-      updateUser({ profileImage: dataUrl });
-    };
-    reader.readAsDataURL(file);
+    setPhotoError("");
+    setIsUploadingPhoto(true);
+    try {
+      await uploadAvatar(file);
+    } catch {
+      setPhotoError("Failed to upload photo. Please try again.");
+    } finally {
+      setIsUploadingPhoto(false);
+      // Reset input so the same file can be re-selected after an error
+      e.target.value = "";
+    }
   };
 
   const handleSave = async () => {
     setIsSaving(true);
-    await new Promise((r) => setTimeout(r, 700));
-    updateUser({
-      name: form.name,
-      email: form.email,
-      phone: form.phone as any,
-      address: form.address as any,
-    } as any);
-    setIsEditing(false);
-    setIsSaving(false);
+    try {
+      await updateUser({
+        name: form.name || undefined,
+        phone: form.phone || undefined,
+        address: form.address || undefined,
+        city: form.city || undefined,
+        postalCode: form.postalCode || undefined,
+      });
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleLogout = () => {
@@ -166,11 +176,16 @@ export default function ProfilePage() {
 
               {/* Camera overlay — always accessible */}
               <button
-                onClick={() => photoInputRef.current?.click()}
-                className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-all cursor-pointer"
+                onClick={() => !isUploadingPhoto && photoInputRef.current?.click()}
+                disabled={isUploadingPhoto}
+                className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-full transition-all cursor-pointer disabled:cursor-wait"
                 title="Change profile photo"
               >
-                <Camera className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                {isUploadingPhoto ? (
+                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin opacity-0 group-hover:opacity-100 transition-opacity" />
+                ) : (
+                  <Camera className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                )}
               </button>
               <input
                 ref={photoInputRef}
@@ -203,7 +218,12 @@ export default function ProfilePage() {
                 {user.isVerified ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
                 {user.isVerified ? "Verified" : "Unverified"}
               </span>
-              <p className="text-xs text-gray-400 mt-2">Hover over photo to change it</p>
+              <p className="text-xs text-gray-400 mt-2">
+                {isUploadingPhoto ? "Uploading..." : "Hover over photo to change it"}
+              </p>
+              {photoError && (
+                <p className="text-xs text-red-500 mt-1">{photoError}</p>
+              )}
             </div>
 
             <ActionButton
@@ -288,40 +308,16 @@ export default function ProfilePage() {
           {/* Followed Shops */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Followed Shops</h3>
-            {!user.followedShops || user.followedShops.length === 0 ? (
-              <div className="text-center py-8">
-                <Store className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">No followed shops yet</p>
-                <Link
-                  href="/products"
-                  className="text-sm text-gray-900 font-medium hover:underline mt-2 inline-block"
-                >
-                  Browse products
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {user.followedShops.map((shopId) => (
-                  <div
-                    key={shopId}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-gray-900 rounded-full flex items-center justify-center">
-                        <Store className="w-4 h-4 text-white" />
-                      </div>
-                      <span className="text-sm text-gray-900 font-medium">{shopId}</span>
-                    </div>
-                    <Link
-                      href={`/shop/${shopId}`}
-                      className="text-gray-400 hover:text-gray-700 transition-colors"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="text-center py-8">
+              <Store className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 text-sm">No followed shops yet</p>
+              <Link
+                href="/products"
+                className="text-sm text-gray-900 font-medium hover:underline mt-2 inline-block"
+              >
+                Browse products
+              </Link>
+            </div>
           </div>
         </div>
 

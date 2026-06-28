@@ -270,7 +270,19 @@ export default function ProductDetails({ product, onBack }: ProductDetailsProps)
     : 0;
 
   const handleAddToCart = () => {
-    addToCart(product, quantity, selectedSize, selectedColor);
+    addToCart(
+      {
+        id: String(product.id),
+        name: product.name,
+        price: product.price,
+        originalPrice: product.originalPrice,
+        images: [typeof product.image === "string" ? product.image : ""],
+        shopName: product.store,
+      },
+      quantity,
+      selectedSize,
+      selectedColor,
+    );
   };
 
   return (

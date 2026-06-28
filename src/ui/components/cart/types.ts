@@ -1,6 +1,6 @@
 export interface CartItem {
-  id: number;
-  productId: number;
+  id: string;        // UUID from backend
+  productId: string; // UUID from backend
   name: string;
   creator: string;
   price: number;
