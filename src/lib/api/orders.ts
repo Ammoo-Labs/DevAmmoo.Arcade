@@ -29,3 +29,34 @@ export function getMyOrders(token: string): Promise<BackendOrder[]> {
 export function getOrderById(token: string, id: string): Promise<BackendOrder> {
   return apiFetch<BackendOrder>(`/orders/${id}`, { token });
 }
+
+export function getSellerOrders(token: string): Promise<BackendOrder[]> {
+  return apiFetch<BackendOrder[]>('/orders/seller', { token });
+}
+
+export type OrderStatusValue =
+  | 'pending'
+  | 'on_hold'
+  | 'processing'
+  | 'packaged'
+  | 'shipped'
+  | 'completed'
+  | 'cancelled';
+
+export function updateOrderStatus(
+  token: string,
+  id: string,
+  data: { status: OrderStatusValue; trackingNumber?: string; handoverProofUrl?: string; note?: string },
+): Promise<BackendOrder> {
+  return apiFetch<BackendOrder>(`/orders/${id}/status`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(data),
+  });
+}
+
+export function uploadOrderProof(token: string, id: string, file: File): Promise<{ url: string }> {
+  const body = new FormData();
+  body.append('file', file);
+  return apiFetch<{ url: string }>(`/orders/${id}/proof`, { method: 'POST', token, body });
+}
