@@ -3,32 +3,39 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Mail, CheckCircle } from "lucide-react";
 import { FormButton, ActionButton } from "@/ui/components/button";
+import { supabase } from "@/lib/supabase";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const sendResetEmail = async () => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) {
+      setErrorMessage(error.message);
+      return false;
+    }
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      console.log("Password reset request for:", email);
-      setIsSubmitted(true);
-      setIsLoading(false);
-    }, 2000);
+    setErrorMessage("");
+    const ok = await sendResetEmail();
+    setIsLoading(false);
+    if (ok) setIsSubmitted(true);
   };
 
-  const handleResendEmail = () => {
+  const handleResendEmail = async () => {
     setIsLoading(true);
-    
-    // Simulate resend API call
-    setTimeout(() => {
-      console.log("Resending password reset email to:", email);
-      setIsLoading(false);
-    }, 1000);
+    setErrorMessage("");
+    await sendResetEmail();
+    setIsLoading(false);
   };
 
   if (isSubmitted) {
@@ -60,6 +67,9 @@ export default function ForgotPasswordPage() {
                 >
                   {isLoading ? "Sending..." : "Resend email"}
                 </ActionButton>
+                {errorMessage && (
+                  <p className="text-xs text-red-500 mt-3">{errorMessage}</p>
+                )}
               </div>
 
               <div className="flex flex-col space-y-4">
@@ -117,6 +127,9 @@ export default function ForgotPasswordPage() {
               <p className="mt-2 text-xs text-gray-500">
                 We'll send you a secure link to reset your password
               </p>
+              {errorMessage && (
+                <p className="mt-2 text-xs text-red-500">{errorMessage}</p>
+              )}
             </div>
 
             <div>
