@@ -1,31 +1,34 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ActionButton } from "@/ui/components/button";
-import { ProductCard } from "@/ui/components/product";
-import { sampleProducts } from "@/ui/components/product/sample-data";
+import { ProductCard, Product, mapBackendProduct } from "@/ui/components/product";
+import { listProducts } from "@/lib/api/products";
 import { PRODUCT_FILTER_CATEGORIES as categories } from "@/ui/components/product/categories";
 
 export default function FeaturedProducts() {
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [likedProducts, setLikedProducts] = useState<Record<number, boolean>>(
-    sampleProducts.reduce(
-      (acc, p) => ({ ...acc, [p.id]: p.isLiked || false }),
-      {} as Record<number, boolean>
-    )
-  );
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleLike = (productId: number) => {
-    setLikedProducts((prev) => ({ ...prev, [productId]: !prev[productId] }));
-  };
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    listProducts({
+      sort: "popular",
+      limit: 8,
+      category: selectedCategory === "All" ? undefined : selectedCategory,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setProducts(res.items.map(mapBackendProduct));
+      })
+      .catch(() => { if (!cancelled) setProducts([]); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedCategory]);
 
-  const handleAddToCart = (productId: number) => {
-    console.log("Added to cart:", productId);
-  };
-
-  const filteredProducts = sampleProducts.filter(
-    (p) => selectedCategory === "All" || p.category === selectedCategory
-  );
+  const filteredProducts = products;
 
   return (
     <section className="py-8 sm:py-12 lg:py-16 bg-gray-50">
@@ -63,9 +66,6 @@ export default function FeaturedProducts() {
             <ProductCard
               key={product.id}
               product={product}
-              isLiked={likedProducts[product.id]}
-              onLike={handleLike}
-              onAddToCart={handleAddToCart}
               showQuickActions={true}
               showStore={false}
               size="md"
@@ -75,7 +75,7 @@ export default function FeaturedProducts() {
         </div>
 
         {/* No Results */}
-        {filteredProducts.length === 0 && (
+        {!isLoading && filteredProducts.length === 0 && (
           <div className="text-center py-12">
             <p className="text-gray-500 text-lg mb-4">No products in this category</p>
             <button

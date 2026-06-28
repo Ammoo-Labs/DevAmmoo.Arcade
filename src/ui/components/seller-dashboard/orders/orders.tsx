@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Search,
-  Filter,
   Eye,
   X,
   Clock,
@@ -12,31 +11,62 @@ import {
   CheckCircle,
   AlertCircle,
   PauseCircle,
-  Bell,
   ChevronDown,
   ChevronRight,
   Clipboard,
   Upload,
-  ImageIcon,
 } from "lucide-react";
 import { ActionButton, IconButton } from "@/ui/components/button";
+import { useAuth } from "@/ui/components/auth/auth-context";
 import {
-  SellerOrder,
-  OrderStatus,
-  getOrders,
+  getSellerOrders,
   updateOrderStatus,
-  getAllowedTransitions,
-  getStatusLabel,
-  getBuyerNotifications,
-  BuyerNotification,
-} from "@/ui/components/seller-dashboard/seller-store";
-import { useRef } from "react";
+  uploadOrderProof,
+  OrderStatusValue,
+} from "@/lib/api/orders";
+import { BackendOrder } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/client";
 
-const SELLER_ID = "seller-sarah";
+interface StatusHistoryEntry {
+  status: string;
+  timestamp: string;
+  note?: string;
+}
+
+function getStatusHistory(order: BackendOrder): StatusHistoryEntry[] {
+  return Array.isArray(order.statusHistory) ? (order.statusHistory as StatusHistoryEntry[]) : [];
+}
+
+// ─── Status helpers (mirrors backend-enforced transitions) ────────────────────
+function getStatusLabel(status: OrderStatusValue): string {
+  const labels: Record<OrderStatusValue, string> = {
+    pending: "New / Pending",
+    on_hold: "On Hold",
+    processing: "Processing",
+    packaged: "Packaged",
+    shipped: "Shipped / Dispatched",
+    completed: "Completed / Finalized",
+    cancelled: "Cancelled",
+  };
+  return labels[status];
+}
+
+function getAllowedTransitions(current: string): OrderStatusValue[] {
+  const map: Record<string, OrderStatusValue[]> = {
+    pending: ["on_hold", "processing", "cancelled"],
+    on_hold: ["processing", "cancelled"],
+    processing: ["packaged", "cancelled"],
+    packaged: ["shipped", "cancelled"],
+    shipped: ["completed"],
+    completed: [],
+    cancelled: [],
+  };
+  return map[current] ?? [];
+}
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<
-  OrderStatus,
+  string,
   { icon: React.ReactNode; bg: string; text: string; badge: string }
 > = {
   pending: {
@@ -83,7 +113,7 @@ const STATUS_CONFIG: Record<
   },
 };
 
-const TRANSITION_LABELS: Partial<Record<OrderStatus, string>> = {
+const TRANSITION_LABELS: Partial<Record<OrderStatusValue, string>> = {
   on_hold: "Put On Hold",
   processing: "Mark as Processing",
   packaged: "Mark as Packaged",
@@ -92,64 +122,71 @@ const TRANSITION_LABELS: Partial<Record<OrderStatus, string>> = {
   cancelled: "Cancel Order",
 };
 
-const NOTIFICATION_TYPE_CONFIG: Record<BuyerNotification["type"], { icon: React.ReactNode; badge: string }> = {
-  shipped: { icon: <Truck className="w-4 h-4 text-purple-600" />, badge: "bg-purple-100 text-purple-700" },
-  cancelled: { icon: <AlertCircle className="w-4 h-4 text-red-600" />, badge: "bg-red-100 text-red-700" },
-  on_hold: { icon: <PauseCircle className="w-4 h-4 text-orange-600" />, badge: "bg-orange-100 text-orange-700" },
-  processing: { icon: <Package className="w-4 h-4 text-blue-600" />, badge: "bg-blue-100 text-blue-700" },
-  completed: { icon: <CheckCircle className="w-4 h-4 text-green-600" />, badge: "bg-green-100 text-green-700" },
-  general: { icon: <Bell className="w-4 h-4 text-gray-600" />, badge: "bg-gray-100 text-gray-700" },
-};
-
 export default function Orders() {
-  const [orders, setOrders] = useState<SellerOrder[]>([]);
-  const [notifications, setNotifications] = useState<BuyerNotification[]>([]);
+  const { accessToken } = useAuth();
+  const [orders, setOrders] = useState<BackendOrder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [selectedOrder, setSelectedOrder] = useState<SellerOrder | null>(null);
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<BackendOrder | null>(null);
 
   // Shipping modal state
   const [pendingTransition, setPendingTransition] = useState<{
     orderId: string;
-    status: OrderStatus;
+    status: OrderStatusValue;
   } | null>(null);
   const [trackingInput, setTrackingInput] = useState("");
-  const [handoverProofInput, setHandoverProofInput] = useState<string>("");
+  const [handoverProofFile, setHandoverProofFile] = useState<File | null>(null);
+  const [handoverProofPreview, setHandoverProofPreview] = useState<string>("");
   const [transitioning, setTransitioning] = useState(false);
+  const [transitionError, setTransitionError] = useState("");
   const handoverFileRef = useRef<HTMLInputElement>(null);
 
-  const reload = () => {
-    setOrders(getOrders(SELLER_ID));
-    setNotifications(getBuyerNotifications());
+  const reload = async () => {
+    if (!accessToken) return;
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      const data = await getSellerOrders(accessToken);
+      setOrders(data);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : "Failed to load orders.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     reload();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
 
   const filteredOrders = orders.filter((o) => {
     const q = searchTerm.toLowerCase();
     const matchesSearch =
       o.id.toLowerCase().includes(q) ||
-      o.customer.name.toLowerCase().includes(q) ||
-      o.customer.email.toLowerCase().includes(q);
+      o.customerName.toLowerCase().includes(q) ||
+      o.customerEmail.toLowerCase().includes(q);
     return matchesSearch && (statusFilter === "all" || o.status === statusFilter);
   });
 
   const handleHandoverFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setHandoverProofFile(file);
     const reader = new FileReader();
-    reader.onload = (ev) => setHandoverProofInput(ev.target?.result as string);
+    reader.onload = (ev) => setHandoverProofPreview(ev.target?.result as string);
     reader.readAsDataURL(file);
   };
 
-  const handleTransitionClick = (orderId: string, newStatus: OrderStatus) => {
+  const handleTransitionClick = (orderId: string, newStatus: OrderStatusValue) => {
+    setTransitionError("");
     if (newStatus === "shipped") {
       setPendingTransition({ orderId, status: newStatus });
       setTrackingInput("");
-      setHandoverProofInput("");
+      setHandoverProofFile(null);
+      setHandoverProofPreview("");
     } else {
       applyTransition(orderId, newStatus);
     }
@@ -157,23 +194,36 @@ export default function Orders() {
 
   const applyTransition = async (
     orderId: string,
-    newStatus: OrderStatus,
+    newStatus: OrderStatusValue,
     tracking?: string,
-    handoverProof?: string
+    proofFile?: File | null
   ) => {
+    if (!accessToken) return;
     setTransitioning(true);
-    await new Promise((r) => setTimeout(r, 400));
-    updateOrderStatus(orderId, newStatus, { trackingNumber: tracking, handoverProof });
-    reload();
-    if (selectedOrder?.id === orderId) {
-      const updated = getOrders(SELLER_ID).find((o) => o.id === orderId) ?? null;
-      setSelectedOrder(updated);
+    setTransitionError("");
+    try {
+      let handoverProofUrl: string | undefined;
+      if (proofFile) {
+        const { url } = await uploadOrderProof(accessToken, orderId, proofFile);
+        handoverProofUrl = url;
+      }
+      await updateOrderStatus(accessToken, orderId, {
+        status: newStatus,
+        trackingNumber: tracking,
+        handoverProofUrl,
+      });
+      await reload();
+      if (selectedOrder?.id === orderId) {
+        const updated = (await getSellerOrders(accessToken)).find((o) => o.id === orderId) ?? null;
+        setSelectedOrder(updated);
+      }
+      setPendingTransition(null);
+    } catch (err) {
+      setTransitionError(err instanceof ApiError ? err.message : "Failed to update order status.");
+    } finally {
+      setTransitioning(false);
     }
-    setPendingTransition(null);
-    setTransitioning(false);
   };
-
-  const unreadCount = notifications.filter((n) => !n.read).length;
 
   // Summary counts
   const counts: Record<string, number> = { all: orders.length };
@@ -189,56 +239,14 @@ export default function Orders() {
           <h1 className="text-2xl font-bold text-gray-900">Order Management</h1>
           <p className="text-gray-600">Track and manage every customer order</p>
         </div>
-
-        {/* Notification bell */}
-        <div className="relative">
-          <button
-            onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-          >
-            <Bell className="w-5 h-5 text-gray-600" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
-                {unreadCount}
-              </span>
-            )}
-          </button>
-
-          {showNotifications && (
-            <div className="absolute right-0 top-12 w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 max-h-96 overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
-                <h4 className="font-semibold text-gray-900">Buyer Notifications</h4>
-                <button onClick={() => setShowNotifications(false)} className="text-gray-400 hover:text-gray-600">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              {notifications.length === 0 ? (
-                <p className="text-gray-500 text-sm text-center py-8">No notifications yet</p>
-              ) : (
-                notifications.slice(0, 20).map((n) => {
-                  const cfg = NOTIFICATION_TYPE_CONFIG[n.type];
-                  return (
-                    <div
-                      key={n.id}
-                      className={`px-4 py-3 border-b border-gray-50 flex gap-3 ${n.read ? "opacity-60" : ""}`}
-                    >
-                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${cfg.badge}`}>
-                        {cfg.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-800">{n.message}</p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          To: {n.buyerEmail} · {new Date(n.timestamp).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
-        </div>
       </div>
+
+      {/* Load error */}
+      {loadError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <p className="text-sm text-red-700">{loadError}</p>
+        </div>
+      )}
 
       {/* Status summary pills */}
       <div className="flex flex-wrap gap-2">
@@ -257,7 +265,7 @@ export default function Orders() {
                 }`}
               >
                 {cfg && cfg.icon}
-                <span className="capitalize">{s === "all" ? "All Orders" : getStatusLabel(s)}</span>
+                <span className="capitalize">{s === "all" ? "All Orders" : getStatusLabel(s as OrderStatusValue)}</span>
                 <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${active ? "bg-white bg-opacity-20 text-white" : "bg-gray-100 text-gray-500"}`}>
                   {counts[s] ?? 0}
                 </span>
@@ -300,42 +308,52 @@ export default function Orders() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredOrders.map((order) => {
-                const cfg = STATUS_CONFIG[order.status];
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto" />
+                  </td>
+                </tr>
+              ) : (
+                filteredOrders.map((order) => {
+                const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending;
                 const transitions = getAllowedTransitions(order.status);
+                const total = Number(order.total);
                 return (
                   <tr key={order.id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-4 px-4">
                       <p className="font-mono font-medium text-gray-900 text-sm">{order.id}</p>
-                      <p className="text-xs text-gray-400">{order.paymentStatus === "paid" ? "💳 Paid" : "⏳ Pending payment"}</p>
+                      <p className="text-xs text-gray-400">{order.paymentStatus === "paid" ? "Paid" : "Pending payment"}</p>
                     </td>
                     <td className="py-4 px-4">
-                      <p className="font-medium text-gray-900 text-sm">{order.customer.name}</p>
-                      <p className="text-xs text-gray-500">{order.customer.email}</p>
+                      <p className="font-medium text-gray-900 text-sm">{order.customerName}</p>
+                      <p className="text-xs text-gray-500">{order.customerEmail}</p>
                     </td>
                     <td className="py-4 px-4">
                       <div className="space-y-0.5">
-                        {order.products.slice(0, 2).map((p, i) => (
-                          <p key={i} className="text-xs text-gray-600">
+                        {order.items.slice(0, 2).map((p) => (
+                          <p key={p.id} className="text-xs text-gray-600">
                             {p.quantity}× {p.name}
                           </p>
                         ))}
-                        {order.products.length > 2 && (
-                          <p className="text-xs text-gray-400">+{order.products.length - 2} more</p>
+                        {order.items.length > 2 && (
+                          <p className="text-xs text-gray-400">+{order.items.length - 2} more</p>
                         )}
                       </div>
                     </td>
-                    <td className="py-4 px-4 font-semibold text-gray-900">${order.total.toFixed(2)}</td>
+                    <td className="py-4 px-4 font-semibold text-gray-900">${total.toFixed(2)}</td>
                     <td className="py-4 px-4">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${cfg.badge}`}>
                         {cfg.icon}
-                        {getStatusLabel(order.status)}
+                        {getStatusLabel(order.status as OrderStatusValue)}
                       </span>
                       {order.trackingNumber && (
-                        <p className="text-xs text-gray-400 mt-1">📦 {order.trackingNumber}</p>
+                        <p className="text-xs text-gray-400 mt-1">{order.trackingNumber}</p>
                       )}
                     </td>
-                    <td className="py-4 px-4 text-sm text-gray-600">{order.orderDate}</td>
+                    <td className="py-4 px-4 text-sm text-gray-600">
+                      {new Date(order.orderDate).toLocaleDateString()}
+                    </td>
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-1 flex-wrap">
                         <IconButton
@@ -376,12 +394,13 @@ export default function Orders() {
                     </td>
                   </tr>
                 );
-              })}
+                })
+              )}
             </tbody>
           </table>
         </div>
 
-        {filteredOrders.length === 0 && (
+        {!isLoading && filteredOrders.length === 0 && (
           <div className="text-center py-12">
             <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-500">No orders found</p>
@@ -439,10 +458,10 @@ export default function Orders() {
                   className="hidden"
                   onChange={handleHandoverFile}
                 />
-                {handoverProofInput ? (
+                {handoverProofPreview ? (
                   <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
                     <img
-                      src={handoverProofInput.startsWith("data:image") ? handoverProofInput : undefined}
+                      src={handoverProofPreview.startsWith("data:image") ? handoverProofPreview : undefined}
                       alt="proof"
                       className="w-12 h-12 object-cover rounded border border-green-300"
                       onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -450,7 +469,7 @@ export default function Orders() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-green-800 font-medium">Proof uploaded</p>
                       <button
-                        onClick={() => setHandoverProofInput("")}
+                        onClick={() => { setHandoverProofFile(null); setHandoverProofPreview(""); }}
                         className="text-xs text-green-600 hover:text-red-500 mt-0.5"
                       >
                         Remove
@@ -468,8 +487,12 @@ export default function Orders() {
                 )}
               </div>
 
+              {transitionError && (
+                <p className="text-sm text-red-600">{transitionError}</p>
+              )}
+
               <div className="bg-purple-50 rounded-lg p-3 text-xs text-purple-700">
-                📢 The buyer will receive an in-app notification. The admin will also see the tracking ID.
+                The buyer will receive an in-app notification. The admin will also see the tracking ID.
               </div>
             </div>
             <div className="border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
@@ -482,10 +505,10 @@ export default function Orders() {
                     pendingTransition.orderId,
                     pendingTransition.status,
                     trackingInput || undefined,
-                    handoverProofInput || undefined
+                    handoverProofFile
                   )
                 }
-                disabled={transitioning || !handoverProofInput}
+                disabled={transitioning || !handoverProofFile}
                 className="flex items-center gap-2"
               >
                 <Truck className="w-4 h-4" />
@@ -503,7 +526,7 @@ export default function Orders() {
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-xl">
               <div>
                 <h3 className="text-lg font-semibold">{selectedOrder.id}</h3>
-                <p className="text-sm text-gray-500">{selectedOrder.orderDate}</p>
+                <p className="text-sm text-gray-500">{new Date(selectedOrder.orderDate).toLocaleDateString()}</p>
               </div>
               <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
@@ -515,15 +538,15 @@ export default function Orders() {
               <div className="flex items-center justify-between">
                 <span
                   className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-                    STATUS_CONFIG[selectedOrder.status].badge
+                    (STATUS_CONFIG[selectedOrder.status] ?? STATUS_CONFIG.pending).badge
                   }`}
                 >
-                  {STATUS_CONFIG[selectedOrder.status].icon}
-                  {getStatusLabel(selectedOrder.status)}
+                  {(STATUS_CONFIG[selectedOrder.status] ?? STATUS_CONFIG.pending).icon}
+                  {getStatusLabel(selectedOrder.status as OrderStatusValue)}
                 </span>
                 {selectedOrder.trackingNumber && (
                   <span className="text-sm text-gray-600 font-mono bg-gray-100 px-3 py-1 rounded-lg">
-                    📦 {selectedOrder.trackingNumber}
+                    {selectedOrder.trackingNumber}
                   </span>
                 )}
               </div>
@@ -532,9 +555,9 @@ export default function Orders() {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">Customer</h4>
                 <div className="bg-gray-50 rounded-lg p-4 space-y-1">
-                  <p className="font-medium text-gray-900">{selectedOrder.customer.name}</p>
-                  <p className="text-sm text-gray-600">{selectedOrder.customer.email}</p>
-                  <p className="text-sm text-gray-500 mt-2">📍 {selectedOrder.shippingAddress}</p>
+                  <p className="font-medium text-gray-900">{selectedOrder.customerName}</p>
+                  <p className="text-sm text-gray-600">{selectedOrder.customerEmail}</p>
+                  <p className="text-sm text-gray-500 mt-2">{selectedOrder.shippingAddress}</p>
                 </div>
               </div>
 
@@ -542,8 +565,8 @@ export default function Orders() {
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">Items Ordered</h4>
                 <div className="space-y-2">
-                  {selectedOrder.products.map((p, i) => (
-                    <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+                  {selectedOrder.items.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
                       <div>
                         <p className="font-medium text-gray-900 text-sm">{p.name}</p>
                         <p className="text-xs text-gray-500">
@@ -552,7 +575,7 @@ export default function Orders() {
                           {p.color && ` · Color: ${p.color}`}
                         </p>
                       </div>
-                      <p className="font-semibold text-gray-900 text-sm">${(p.price * p.quantity).toFixed(2)}</p>
+                      <p className="font-semibold text-gray-900 text-sm">${(Number(p.price) * p.quantity).toFixed(2)}</p>
                     </div>
                   ))}
                 </div>
@@ -561,46 +584,48 @@ export default function Orders() {
               {/* Totals */}
               <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
                 <div className="flex justify-between text-gray-600">
-                  <span>Subtotal</span><span>${selectedOrder.subtotal.toFixed(2)}</span>
+                  <span>Subtotal</span><span>${Number(selectedOrder.subtotal).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
-                  <span>Shipping</span><span>{selectedOrder.shipping === 0 ? "Free" : `$${selectedOrder.shipping.toFixed(2)}`}</span>
+                  <span>Shipping</span><span>{Number(selectedOrder.shipping) === 0 ? "Free" : `$${Number(selectedOrder.shipping).toFixed(2)}`}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
-                  <span>Tax</span><span>${selectedOrder.tax.toFixed(2)}</span>
+                  <span>Tax</span><span>${Number(selectedOrder.tax).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-2">
-                  <span>Total</span><span>${selectedOrder.total.toFixed(2)}</span>
+                  <span>Total</span><span>${Number(selectedOrder.total).toFixed(2)}</span>
                 </div>
               </div>
 
               {/* Status Timeline */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Order Timeline</h4>
-                <div className="relative">
-                  {selectedOrder.statusHistory.map((entry, idx) => {
-                    const cfg = STATUS_CONFIG[entry.status];
-                    const isLast = idx === selectedOrder.statusHistory.length - 1;
-                    return (
-                      <div key={idx} className="flex gap-3 pb-4 relative">
-                        {!isLast && (
-                          <div className="absolute left-[13px] top-6 bottom-0 w-0.5 bg-gray-200" />
-                        )}
-                        <div
-                          className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center z-10 ${cfg.badge}`}
-                        >
-                          {cfg.icon}
+              {getStatusHistory(selectedOrder).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Order Timeline</h4>
+                  <div className="relative">
+                    {getStatusHistory(selectedOrder).map((entry, idx) => {
+                      const cfg = STATUS_CONFIG[entry.status] ?? STATUS_CONFIG.pending;
+                      const isLast = idx === getStatusHistory(selectedOrder).length - 1;
+                      return (
+                        <div key={idx} className="flex gap-3 pb-4 relative">
+                          {!isLast && (
+                            <div className="absolute left-[13px] top-6 bottom-0 w-0.5 bg-gray-200" />
+                          )}
+                          <div
+                            className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center z-10 ${cfg.badge}`}
+                          >
+                            {cfg.icon}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{getStatusLabel(entry.status as OrderStatusValue)}</p>
+                            {entry.note && <p className="text-xs text-gray-500 italic">{entry.note}</p>}
+                            <p className="text-xs text-gray-400">{new Date(entry.timestamp).toLocaleString()}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{getStatusLabel(entry.status)}</p>
-                          {entry.note && <p className="text-xs text-gray-500 italic">{entry.note}</p>}
-                          <p className="text-xs text-gray-400">{new Date(entry.timestamp).toLocaleString()}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Action buttons */}
               {getAllowedTransitions(selectedOrder.status).length > 0 && (
@@ -613,8 +638,9 @@ export default function Orders() {
                         <button
                           key={t}
                           onClick={() => {
+                            const orderId = selectedOrder.id;
                             setSelectedOrder(null);
-                            handleTransitionClick(selectedOrder!.id, t);
+                            handleTransitionClick(orderId, t);
                           }}
                           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
                             isCancel

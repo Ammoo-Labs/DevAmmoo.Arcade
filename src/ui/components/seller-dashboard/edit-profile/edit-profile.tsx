@@ -20,121 +20,124 @@ import {
 import { ActionButton } from "@/ui/components/button";
 import { useAuth } from "@/ui/components/auth/auth-context";
 import {
-  getSellerProfile,
-  saveSellerProfile,
-  submitSensitiveProfileChanges,
-  getSellerAccountStatus,
-  SellerProfile,
-} from "@/ui/components/seller-dashboard/seller-store";
-
-const SELLER_ID = "seller-sarah";
+  getMyShop,
+  updateMyShop,
+  updateMyShopImages,
+  submitSensitiveShopChanges,
+  SocialLinks,
+} from "@/lib/api/shops";
+import { BackendShop } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/client";
 
 interface ProfileData {
-  name: string;
+  shopName: string;
   email: string;
   phone: string;
   address: string;
-  bio: string;
   profileImage: string;
   bannerImage: string;
-  shopName: string;
   shopDescription: string;
   courierService: string;
   returnPolicy: string;
-  returnableitems: string;
+  returnableItems: string;
   nonReturnableItems: string;
   exchangePolicy: string;
   exchangeConditions: string;
   returnSteps: string;
   refundInfo: string;
-  contactEmail: string;
-  contactPhone: string;
   shopAddress: string;
   shopEmail: string;
   shopPhone: string;
-  socialLinks: {
-    facebook?: string;
-    instagram?: string;
-    twitter?: string;
-    youtube?: string;
-    tiktok?: string;
-  };
+  socialLinks: SocialLinks;
 }
 
-const DEFAULT_PROFILE: ProfileData = {
-  name: "John Doe",
-  email: "john.doe@example.com",
-  phone: "+1 (555) 123-4567",
-  address: "123 Main Street, City, State 12345",
-  bio: "Passionate seller with 5+ years of experience in handcrafted items.",
+const EMPTY_PROFILE: ProfileData = {
+  shopName: "",
+  email: "",
+  phone: "",
+  address: "",
   profileImage: "",
   bannerImage: "",
-  shopName: "John's Craft Store",
-  shopDescription: "Quality handcrafted items made with love and attention to detail.",
+  shopDescription: "",
   courierService: "",
-  returnPolicy: "We accept returns within 30 days of purchase.",
-  returnableitems: "• Unworn clothing\n• Accessories in original packaging",
-  nonReturnableItems: "• Custom or personalized items\n• Gift cards",
-  exchangePolicy: "We offer free exchanges for size or color within 30 days.",
-  exchangeConditions: "• Item must be in original condition\n• Subject to availability",
-  returnSteps: "1. Initiate Return\n2. Pack & Ship\n3. Get Refund",
-  refundInfo: "• Refunds are processed within 5–7 business days.",
-  contactEmail: "returns@ammooarcade.com",
-  contactPhone: "1-800-AMMOO-HELP",
-  shopAddress: "123 Gaming Street, Arcade City, AC 12345",
-  shopEmail: "shop@ammooarcade.com",
-  shopPhone: "(555) 123-4567",
+  returnPolicy: "",
+  returnableItems: "",
+  nonReturnableItems: "",
+  exchangePolicy: "",
+  exchangeConditions: "",
+  returnSteps: "",
+  refundInfo: "",
+  shopAddress: "",
+  shopEmail: "",
+  shopPhone: "",
   socialLinks: { facebook: "", instagram: "", twitter: "", youtube: "", tiktok: "" },
 };
 
-function toProfileData(sp: SellerProfile, defaults: ProfileData): ProfileData {
+function toProfileData(shop: BackendShop): ProfileData {
   return {
-    ...defaults,
-    name: sp.shopName ?? defaults.name,
-    email: sp.email ?? defaults.email,
-    phone: sp.phone ?? defaults.phone,
-    address: sp.address ?? defaults.address,
-    profileImage: sp.profileImage ?? "",
-    bannerImage: sp.bannerImage ?? "",
-    shopName: sp.shopName ?? defaults.shopName,
-    shopDescription: sp.shopDescription ?? defaults.shopDescription,
-    courierService: sp.courierService ?? "",
-    shopAddress: sp.shopAddress ?? defaults.shopAddress,
-    shopEmail: sp.shopEmail ?? defaults.shopEmail,
-    shopPhone: sp.shopPhone ?? defaults.shopPhone,
-    contactEmail: sp.contactEmail ?? defaults.contactEmail,
-    contactPhone: sp.contactPhone ?? defaults.contactPhone,
-    returnPolicy: sp.returnPolicy ?? defaults.returnPolicy,
-    returnableitems: sp.returnableitems ?? defaults.returnableitems,
-    nonReturnableItems: sp.nonReturnableItems ?? defaults.nonReturnableItems,
-    exchangePolicy: sp.exchangePolicy ?? defaults.exchangePolicy,
-    exchangeConditions: sp.exchangeConditions ?? defaults.exchangeConditions,
-    returnSteps: sp.returnSteps ?? defaults.returnSteps,
-    refundInfo: sp.refundInfo ?? defaults.refundInfo,
-    socialLinks: sp.socialLinks ?? defaults.socialLinks,
+    shopName: shop.shopName ?? "",
+    email: shop.email ?? "",
+    phone: shop.phone ?? "",
+    address: shop.address ?? "",
+    profileImage: shop.profileImage ?? "",
+    bannerImage: shop.bannerImage ?? "",
+    shopDescription: shop.shopDescription ?? "",
+    courierService: shop.courierService ?? "",
+    returnPolicy: shop.returnPolicy ?? "",
+    returnableItems: shop.returnableItems ?? "",
+    nonReturnableItems: shop.nonReturnableItems ?? "",
+    exchangePolicy: shop.exchangePolicy ?? "",
+    exchangeConditions: shop.exchangeConditions ?? "",
+    returnSteps: shop.returnSteps ?? "",
+    refundInfo: shop.refundInfo ?? "",
+    shopAddress: shop.shopAddress ?? "",
+    shopEmail: shop.shopEmail ?? "",
+    shopPhone: shop.shopPhone ?? "",
+    socialLinks: {
+      facebook: shop.socialLinks?.facebook ?? "",
+      instagram: shop.socialLinks?.instagram ?? "",
+      twitter: shop.socialLinks?.twitter ?? "",
+      youtube: shop.socialLinks?.youtube ?? "",
+      tiktok: shop.socialLinks?.tiktok ?? "",
+    },
   };
 }
 
 export default function EditProfile() {
-  const { user } = useAuth();
-  const [profileData, setProfileData] = useState<ProfileData>(DEFAULT_PROFILE);
+  const { accessToken } = useAuth();
+  const [shop, setShop] = useState<BackendShop | null>(null);
+  const [profileData, setProfileData] = useState<ProfileData>(EMPTY_PROFILE);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
-  const [pendingSensitiveChange, setPendingSensitiveChange] = useState(false);
-  const [accountStatus, setAccountStatus] = useState<string>("active");
+  const [saveIsError, setSaveIsError] = useState(false);
 
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const profileInputRef = useRef<HTMLInputElement>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [profileFile, setProfileFile] = useState<File | null>(null);
 
-  // Load saved profile from localStorage on mount
+  const reload = async () => {
+    if (!accessToken) return;
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      const data = await getMyShop(accessToken);
+      setShop(data);
+      setProfileData(toProfileData(data));
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : "Failed to load shop profile.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const saved = getSellerProfile(SELLER_ID);
-    const status = getSellerAccountStatus(SELLER_ID);
-    setAccountStatus(status);
-    if (saved.profileChangeStatus === "pending") setPendingSensitiveChange(true);
-    setProfileData(toProfileData(saved, DEFAULT_PROFILE));
-  }, []);
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -143,20 +146,21 @@ export default function EditProfile() {
     setProfileData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSocialChange = (platform: string, value: string) => {
+  const handleSocialChange = (platform: keyof SocialLinks, value: string) => {
     setProfileData((prev) => ({
       ...prev,
       socialLinks: { ...prev.socialLinks, [platform]: value },
     }));
   };
 
-  // Convert file to base64 and update state (works across page reloads)
   const handleImageChange = (
     e: React.ChangeEvent<HTMLInputElement>,
     type: "bannerImage" | "profileImage"
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (type === "bannerImage") setBannerFile(file);
+    else setProfileFile(file);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
@@ -166,61 +170,85 @@ export default function EditProfile() {
   };
 
   const handleSave = async () => {
+    if (!accessToken || !shop) return;
     setIsSaving(true);
+    setSaveMessage("");
+    setSaveIsError(false);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      // Upload images first, if changed
+      if (bannerFile || profileFile) {
+        await updateMyShopImages(accessToken, {
+          profilePicture: profileFile ?? undefined,
+          coverPicture: bannerFile ?? undefined,
+        });
+      }
 
-      // Check if sensitive fields changed
-      const saved = getSellerProfile(SELLER_ID);
       const sensitiveChanged =
-        profileData.email !== (saved.email ?? DEFAULT_PROFILE.email) ||
-        profileData.phone !== (saved.phone ?? DEFAULT_PROFILE.phone) ||
-        profileData.address !== (saved.address ?? DEFAULT_PROFILE.address);
+        profileData.email !== (shop.email ?? "") ||
+        profileData.phone !== (shop.phone ?? "") ||
+        profileData.address !== (shop.address ?? "");
+
+      // Always save the non-sensitive fields immediately
+      await updateMyShop(accessToken, {
+        shopName: profileData.shopName,
+        shopDescription: profileData.shopDescription,
+        courierService: profileData.courierService,
+        shopAddress: profileData.shopAddress,
+        shopEmail: profileData.shopEmail,
+        shopPhone: profileData.shopPhone,
+        returnPolicy: profileData.returnPolicy,
+        returnableItems: profileData.returnableItems,
+        nonReturnableItems: profileData.nonReturnableItems,
+        exchangePolicy: profileData.exchangePolicy,
+        exchangeConditions: profileData.exchangeConditions,
+        returnSteps: profileData.returnSteps,
+        refundInfo: profileData.refundInfo,
+        socialLinks: profileData.socialLinks,
+      });
 
       if (sensitiveChanged) {
-        // Submit sensitive changes for admin approval
-        submitSensitiveProfileChanges(SELLER_ID, {
+        // Submit sensitive changes for admin approval — this suspends the shop server-side
+        await submitSensitiveShopChanges(accessToken, {
           email: profileData.email,
           phone: profileData.phone,
           address: profileData.address,
         });
-        setPendingSensitiveChange(true);
-        setAccountStatus("suspended");
-        setSaveMessage("⚠️ Contact details submitted for admin approval. Your shop is temporarily suspended until approved.");
+        setSaveMessage("Contact details submitted for admin approval. Your shop is temporarily suspended until approved.");
       } else {
-        // Save non-sensitive fields immediately
-        saveSellerProfile(SELLER_ID, {
-          shopName: profileData.shopName,
-          shopDescription: profileData.shopDescription,
-          profileImage: profileData.profileImage,
-          bannerImage: profileData.bannerImage,
-          courierService: profileData.courierService,
-          socialLinks: profileData.socialLinks,
-          shopAddress: profileData.shopAddress,
-          shopEmail: profileData.shopEmail,
-          shopPhone: profileData.shopPhone,
-          returnPolicy: profileData.returnPolicy,
-          returnableitems: profileData.returnableitems,
-          nonReturnableItems: profileData.nonReturnableItems,
-          exchangePolicy: profileData.exchangePolicy,
-          exchangeConditions: profileData.exchangeConditions,
-          returnSteps: profileData.returnSteps,
-          refundInfo: profileData.refundInfo,
-          contactEmail: profileData.contactEmail,
-          contactPhone: profileData.contactPhone,
-        });
         setSaveMessage("Profile saved successfully.");
       }
 
+      setBannerFile(null);
+      setProfileFile(null);
+      await reload();
       setIsEditing(false);
-    } catch (error) {
-      console.error("Failed to save profile:", error);
-      setSaveMessage("Failed to save. Please try again.");
+    } catch (err) {
+      setSaveIsError(true);
+      setSaveMessage(err instanceof ApiError ? err.message : "Failed to save. Please try again.");
     } finally {
       setIsSaving(false);
-      setTimeout(() => setSaveMessage(""), 4000);
+      setTimeout(() => setSaveMessage(""), 5000);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+      </div>
+    );
+  }
+
+  if (loadError && !shop) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+        <p className="text-sm text-red-700">{loadError}</p>
+      </div>
+    );
+  }
+
+  const accountStatus = shop?.accountStatus ?? "active";
+  const pendingSensitiveChange = shop?.profileChangeStatus === "pending";
 
   return (
     <div className="max-w-6xl mx-auto py-10 space-y-8">
@@ -262,10 +290,10 @@ export default function EditProfile() {
       {/* Save message */}
       {saveMessage && (
         <div className={`p-4 rounded-xl border text-sm font-medium ${
-          saveMessage.startsWith("⚠️")
-            ? "bg-orange-50 border-orange-200 text-orange-800"
-            : saveMessage.startsWith("Failed")
+          saveIsError
             ? "bg-red-50 border-red-200 text-red-800"
+            : saveMessage.startsWith("Contact details")
+            ? "bg-orange-50 border-orange-200 text-orange-800"
             : "bg-green-50 border-green-200 text-green-800"
         }`}>
           {saveMessage}
@@ -349,7 +377,7 @@ export default function EditProfile() {
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {[
-            { key: "name", label: "Full Name", Icon: User },
+            { key: "shopName", label: "Shop Owner / Shop Name", Icon: User },
             { key: "email", label: "Email Address", Icon: Mail, sensitive: true },
             { key: "phone", label: "Phone Number", Icon: Phone, sensitive: true },
             { key: "address", label: "Address", Icon: MapPin, sensitive: true },
@@ -366,7 +394,7 @@ export default function EditProfile() {
                 <input
                   type="text"
                   name={key}
-                  value={(profileData as any)[key]}
+                  value={profileData[key as keyof ProfileData] as string}
                   onChange={handleInputChange}
                   disabled={!isEditing}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-50"
@@ -374,17 +402,6 @@ export default function EditProfile() {
               </div>
             </div>
           ))}
-        </div>
-        <div className="mt-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
-          <textarea
-            name="bio"
-            value={profileData.bio}
-            onChange={handleInputChange}
-            disabled={!isEditing}
-            rows={3}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-50"
-          />
         </div>
       </div>
 
@@ -438,20 +455,22 @@ export default function EditProfile() {
       {/* Returns & Exchanges */}
       <div className="bg-white border border-gray-200 rounded-2xl shadow-md p-8 space-y-6">
         <h3 className="text-xl font-semibold mb-6">Returns & Exchanges</h3>
-        {[
-          ["returnPolicy", "Return Policy"],
-          ["returnableitems", "Returnable Items"],
-          ["nonReturnableItems", "Non-Returnable Items"],
-          ["exchangePolicy", "Exchange Policy"],
-          ["exchangeConditions", "Exchange Conditions"],
-          ["returnSteps", "How to Return an Item"],
-          ["refundInfo", "Refund Information"],
-        ].map(([key, label]) => (
+        {(
+          [
+            ["returnPolicy", "Return Policy"],
+            ["returnableItems", "Returnable Items"],
+            ["nonReturnableItems", "Non-Returnable Items"],
+            ["exchangePolicy", "Exchange Policy"],
+            ["exchangeConditions", "Exchange Conditions"],
+            ["returnSteps", "How to Return an Item"],
+            ["refundInfo", "Refund Information"],
+          ] as const
+        ).map(([key, label]) => (
           <div key={key}>
             <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
             <textarea
               name={key}
-              value={(profileData as any)[key]}
+              value={profileData[key]}
               onChange={handleInputChange}
               disabled={!isEditing}
               rows={key === "returnSteps" ? 6 : 3}
@@ -465,17 +484,19 @@ export default function EditProfile() {
       <div className="bg-white border border-gray-200 rounded-2xl shadow-md p-8 space-y-6">
         <h3 className="text-xl font-semibold mb-6">Shop Footer Information</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {[
-            ["shopAddress", "Shop Address"],
-            ["shopEmail", "Shop Email"],
-            ["shopPhone", "Shop Phone"],
-          ].map(([key, label]) => (
+          {(
+            [
+              ["shopAddress", "Shop Address"],
+              ["shopEmail", "Shop Email"],
+              ["shopPhone", "Shop Phone"],
+            ] as const
+          ).map(([key, label]) => (
             <div key={key}>
               <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
               <input
                 type="text"
                 name={key}
-                value={(profileData as any)[key]}
+                value={profileData[key]}
                 onChange={handleInputChange}
                 disabled={!isEditing}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-50"
@@ -486,13 +507,15 @@ export default function EditProfile() {
 
         <h4 className="text-lg font-medium mt-8 mb-4">Social Media Links</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {[
-            { key: "facebook", label: "Facebook", Icon: Facebook },
-            { key: "instagram", label: "Instagram", Icon: Instagram },
-            { key: "twitter", label: "Twitter / X", Icon: Twitter },
-            { key: "youtube", label: "YouTube", Icon: Youtube },
-            { key: "tiktok", label: "TikTok", Icon: Music2 },
-          ].map(({ key, label, Icon }) => (
+          {(
+            [
+              { key: "facebook", label: "Facebook", Icon: Facebook },
+              { key: "instagram", label: "Instagram", Icon: Instagram },
+              { key: "twitter", label: "Twitter / X", Icon: Twitter },
+              { key: "youtube", label: "YouTube", Icon: Youtube },
+              { key: "tiktok", label: "TikTok", Icon: Music2 },
+            ] as const
+          ).map(({ key, label, Icon }) => (
             <div key={key}>
               <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
               <div className="relative">
@@ -500,7 +523,7 @@ export default function EditProfile() {
                 <input
                   type="url"
                   placeholder={`https://${label.toLowerCase()}.com/yourpage`}
-                  value={(profileData.socialLinks as any)[key] ?? ""}
+                  value={profileData.socialLinks[key] ?? ""}
                   onChange={(e) => handleSocialChange(key, e.target.value)}
                   disabled={!isEditing}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent disabled:bg-gray-50"

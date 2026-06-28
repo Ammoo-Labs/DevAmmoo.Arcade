@@ -17,15 +17,15 @@ import {
 } from "lucide-react";
 import { useRef } from "react";
 import { ActionButton, IconButton } from "@/ui/components/button";
+import { useAuth } from "@/ui/components/auth/auth-context";
 import {
-  SellerProduct,
-  PostApprovalStatus,
-  getSellerProducts,
-  saveSellerProduct,
-  deleteSellerProduct,
-} from "@/ui/components/seller-dashboard/seller-store";
-
-const SELLER_ID = "seller-sarah";
+  getMyProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+} from "@/lib/api/products";
+import { BackendProduct } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/client";
 
 const CATEGORIES = [
   "Fashion",
@@ -40,45 +40,71 @@ const CATEGORIES = [
   "Other",
 ];
 
-const emptyForm: Omit<SellerProduct, "id" | "sellerId" | "sales" | "createdAt"> = {
+interface ProductForm {
+  name: string;
+  category: string;
+  price: number;
+  originalPrice?: number;
+  stock: number;
+  status: "active" | "inactive" | "draft";
+  description: string;
+  tags: string[];
+}
+
+const emptyForm: ProductForm = {
   name: "",
   category: "Fashion",
   price: 0,
   originalPrice: undefined,
   stock: 0,
   status: "draft",
-  approvalStatus: "pending",
-  image: "",
   description: "",
   tags: [],
 };
 
 export default function Products() {
-  const [products, setProducts] = useState<SellerProduct[]>([]);
+  const { accessToken } = useAuth();
+  const [products, setProducts] = useState<BackendProduct[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<SellerProduct | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [editingProduct, setEditingProduct] = useState<BackendProduct | null>(null);
+  const [form, setForm] = useState<ProductForm>(emptyForm);
   const [tagInput, setTagInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [viewProduct, setViewProduct] = useState<SellerProduct | null>(null);
+  const [saveError, setSaveError] = useState("");
+  const [viewProduct, setViewProduct] = useState<BackendProduct | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageFile = (file: File) => {
+    setImageFile(file);
     const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      setForm((f) => ({ ...f, image: dataUrl }));
-    };
+    reader.onload = (e) => setImagePreview(e.target?.result as string);
     reader.readAsDataURL(file);
   };
 
-  useEffect(() => {
-    setProducts(getSellerProducts(SELLER_ID));
-  }, []);
+  const reload = async () => {
+    if (!accessToken) return;
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      const data = await getMyProducts(accessToken);
+      setProducts(data);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : "Failed to load products.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  const reload = () => setProducts(getSellerProducts(SELLER_ID));
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
 
   const getStatusColor = (status: string) => {
     if (status === "active") return "bg-green-100 text-green-800";
@@ -113,72 +139,104 @@ export default function Products() {
     setEditingProduct(null);
     setForm(emptyForm);
     setTagInput("");
+    setImageFile(null);
+    setImagePreview("");
+    setSaveError("");
     setShowModal(true);
   };
 
-  const openEdit = (product: SellerProduct) => {
+  const openEdit = (product: BackendProduct) => {
     setEditingProduct(product);
     setForm({
       name: product.name,
       category: product.category,
-      price: product.price,
-      originalPrice: product.originalPrice,
+      price: Number(product.price),
+      originalPrice: product.originalPrice != null ? Number(product.originalPrice) : undefined,
       stock: product.stock,
       status: product.status,
-      approvalStatus: product.approvalStatus ?? "pending",
-      image: product.image,
       description: product.description,
       tags: product.tags ?? [],
     });
     setTagInput("");
+    setImageFile(null);
+    setImagePreview(product.images?.[0] ?? "");
+    setSaveError("");
     setShowModal(true);
   };
 
   const handleSave = async () => {
-    if (!form.name.trim() || form.price <= 0) return;
+    if (!accessToken || !form.name.trim() || form.price <= 0) return;
     setIsSaving(true);
-    await new Promise((r) => setTimeout(r, 600));
+    setSaveError("");
+    try {
+      const fields = {
+        name: form.name,
+        description: form.description,
+        category: form.category,
+        price: Number(form.price),
+        originalPrice: form.originalPrice ? Number(form.originalPrice) : undefined,
+        stock: Number(form.stock),
+        status: form.status,
+        tags: form.tags,
+      };
+      const images = imageFile ? [imageFile] : undefined;
 
-    const product: SellerProduct = {
-      id: editingProduct?.id ?? Date.now(),
-      sellerId: SELLER_ID,
-      sales: editingProduct?.sales ?? 0,
-      createdAt: editingProduct?.createdAt ?? new Date().toISOString().split("T")[0],
-      ...form,
-      price: Number(form.price),
-      originalPrice: form.originalPrice ? Number(form.originalPrice) : undefined,
-      stock: Number(form.stock),
-    };
-
-    saveSellerProduct(product);
-    reload();
-    setShowModal(false);
-    setIsSaving(false);
+      if (editingProduct) {
+        await updateProduct(accessToken, editingProduct.id, fields, images);
+      } else {
+        await createProduct(accessToken, fields, images);
+      }
+      await reload();
+      setShowModal(false);
+    } catch (err) {
+      setSaveError(err instanceof ApiError ? err.message : "Failed to save product.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: string) => {
+    if (!accessToken) return;
     if (!confirm("Delete this product? This cannot be undone.")) return;
-    deleteSellerProduct(id);
-    reload();
+    try {
+      await deleteProduct(accessToken, id);
+      await reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete product.");
+    }
   };
 
-  const handleStatusChange = (id: number, newStatus: SellerProduct["status"]) => {
+  const handleStatusChange = async (id: string, newStatus: BackendProduct["status"]) => {
+    if (!accessToken) return;
     const product = products.find((p) => p.id === id);
     if (!product) return;
-    saveSellerProduct({ ...product, status: newStatus });
-    reload();
+    try {
+      await updateProduct(accessToken, id, {
+        name: product.name,
+        description: product.description,
+        category: product.category,
+        price: Number(product.price),
+        originalPrice: product.originalPrice != null ? Number(product.originalPrice) : undefined,
+        stock: product.stock,
+        status: newStatus,
+        tags: product.tags,
+      });
+      await reload();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to update status.");
+    }
   };
 
   const addTag = () => {
     const tag = tagInput.trim().toLowerCase();
-    if (tag && !form.tags?.includes(tag)) {
-      setForm((f) => ({ ...f, tags: [...(f.tags ?? []), tag] }));
+    if (tag && !form.tags.includes(tag)) {
+      setForm((f) => ({ ...f, tags: [...f.tags, tag] }));
     }
     setTagInput("");
   };
 
   const removeTag = (tag: string) => {
-    setForm((f) => ({ ...f, tags: (f.tags ?? []).filter((t) => t !== tag) }));
+    setForm((f) => ({ ...f, tags: f.tags.filter((t) => t !== tag) }));
   };
 
   return (
@@ -194,6 +252,13 @@ export default function Products() {
           <span>Add Product</span>
         </ActionButton>
       </div>
+
+      {/* Load error */}
+      {loadError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <p className="text-sm text-red-700">{loadError}</p>
+        </div>
+      )}
 
       {/* Rejected products alert */}
       {rejectedProducts.length > 0 && (
@@ -286,17 +351,26 @@ export default function Products() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredProducts.map((product) => {
+              {isLoading ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto" />
+                  </td>
+                </tr>
+              ) : (
+                filteredProducts.map((product) => {
                 const stockStatus = getStockStatus(product.stock);
+                const price = Number(product.price);
+                const originalPrice = product.originalPrice != null ? Number(product.originalPrice) : null;
                 return (
                   <tr key={product.id} className="hover:bg-gray-50">
                     <td className="py-4 px-4">
                       <div className="flex items-center space-x-3">
                         <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                          {product.image ? (
+                          {product.images?.[0] ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                              src={product.image}
+                              src={product.images[0]}
                               alt={product.name}
                               className="w-full h-full object-cover rounded-lg"
                               onError={(e) => { e.currentTarget.style.display = "none"; }}
@@ -313,10 +387,10 @@ export default function Products() {
                     </td>
                     <td className="py-4 px-4 text-gray-600">{product.category}</td>
                     <td className="py-4 px-4">
-                      <p className="font-medium text-gray-900">${product.price.toFixed(2)}</p>
-                      {product.originalPrice && (
+                      <p className="font-medium text-gray-900">${price.toFixed(2)}</p>
+                      {originalPrice && (
                         <p className="text-xs text-gray-400 line-through">
-                          ${product.originalPrice.toFixed(2)}
+                          ${originalPrice.toFixed(2)}
                         </p>
                       )}
                     </td>
@@ -328,7 +402,7 @@ export default function Products() {
                       <select
                         value={product.status}
                         onChange={(e) =>
-                          handleStatusChange(product.id, e.target.value as SellerProduct["status"])
+                          handleStatusChange(product.id, e.target.value as BackendProduct["status"])
                         }
                         className={`px-2 py-1 rounded-full text-xs font-medium border-0 cursor-pointer ${getStatusColor(product.status)}`}
                       >
@@ -378,12 +452,13 @@ export default function Products() {
                     </td>
                   </tr>
                 );
-              })}
+                })
+              )}
             </tbody>
           </table>
         </div>
 
-        {filteredProducts.length === 0 && (
+        {!isLoading && filteredProducts.length === 0 && (
           <div className="text-center py-12">
             <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-500">No products found</p>
@@ -464,7 +539,7 @@ export default function Products() {
                   <select
                     value={form.status}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, status: e.target.value as SellerProduct["status"] }))
+                      setForm((f) => ({ ...f, status: e.target.value as ProductForm["status"] }))
                     }
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black"
                   >
@@ -550,10 +625,10 @@ export default function Products() {
                     if (file && file.type.startsWith("image/")) handleImageFile(file);
                   }}
                 >
-                  {form.image ? (
+                  {imagePreview ? (
                     <>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={form.image} alt="Preview" className="absolute inset-0 w-full h-full object-cover rounded-lg" />
+                      <img src={imagePreview} alt="Preview" className="absolute inset-0 w-full h-full object-cover rounded-lg" />
                       <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-1">
                         <Upload className="w-5 h-5 text-white" />
                         <span className="text-white text-xs font-medium">Click to change</span>
@@ -567,10 +642,10 @@ export default function Products() {
                     </>
                   )}
                 </div>
-                {form.image && (
+                {imagePreview && (
                   <button
                     type="button"
-                    onClick={() => setForm((f) => ({ ...f, image: "" }))}
+                    onClick={() => { setImageFile(null); setImagePreview(""); }}
                     className="mt-1 text-xs text-red-500 hover:text-red-700"
                   >
                     Remove image
@@ -582,7 +657,7 @@ export default function Products() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
                 <div className="flex gap-2 mb-2 flex-wrap">
-                  {(form.tags ?? []).map((tag) => (
+                  {form.tags.map((tag) => (
                     <span
                       key={tag}
                       className="flex items-center gap-1 bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-full"
@@ -617,6 +692,11 @@ export default function Products() {
               {(!form.name.trim() || form.price <= 0) && (
                 <p className="text-xs text-red-500">Product name and a valid price are required.</p>
               )}
+
+              {/* Save error */}
+              {saveError && (
+                <p className="text-xs text-red-500">{saveError}</p>
+              )}
             </div>
 
             <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end gap-3 rounded-b-xl">
@@ -648,9 +728,9 @@ export default function Products() {
             </div>
             <div className="p-6 space-y-3">
               <div className="w-full h-40 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-                {viewProduct.image ? (
+                {viewProduct.images?.[0] ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={viewProduct.image} alt={viewProduct.name} className="h-full object-cover rounded-lg" />
+                  <img src={viewProduct.images[0]} alt={viewProduct.name} className="h-full object-cover rounded-lg" />
                 ) : (
                   <Package className="w-12 h-12 text-gray-400" />
                 )}
@@ -658,12 +738,12 @@ export default function Products() {
               {[
                 ["Name", viewProduct.name],
                 ["Category", viewProduct.category],
-                ["Price", `$${viewProduct.price.toFixed(2)}`],
-                ["Original Price", viewProduct.originalPrice ? `$${viewProduct.originalPrice.toFixed(2)}` : "—"],
+                ["Price", `$${Number(viewProduct.price).toFixed(2)}`],
+                ["Original Price", viewProduct.originalPrice ? `$${Number(viewProduct.originalPrice).toFixed(2)}` : "—"],
                 ["Stock", String(viewProduct.stock)],
                 ["Status", viewProduct.status],
                 ["Sales", String(viewProduct.sales)],
-                ["Created", viewProduct.createdAt],
+                ["Created", new Date(viewProduct.createdAt).toLocaleDateString()],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between text-sm">
                   <span className="text-gray-500">{label}</span>

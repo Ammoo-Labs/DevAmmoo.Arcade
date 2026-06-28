@@ -1,12 +1,8 @@
 import { notFound } from "next/navigation";
 import ProductDetailClient from "./product-detail-client";
-import { allProducts } from "@/ui/components/product/all-products";
-
-export function generateStaticParams() {
-  return allProducts.map((product) => ({
-    id: product.id.toString(),
-  }));
-}
+import { getProduct } from "@/lib/api/products";
+import { mapBackendProduct } from "@/ui/components/product/types";
+import { ApiError } from "@/lib/api/client";
 
 export default async function ProductDetailsPage({
   params,
@@ -14,12 +10,15 @@ export default async function ProductDetailsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const productId = parseInt(id);
-  const product = allProducts.find((p) => p.id === productId);
 
-  if (!product) {
-    notFound();
+  try {
+    const backendProduct = await getProduct(id);
+    const product = mapBackendProduct(backendProduct);
+    return <ProductDetailClient product={product} />;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      notFound();
+    }
+    throw err;
   }
-
-  return <ProductDetailClient product={product!} />;
 }

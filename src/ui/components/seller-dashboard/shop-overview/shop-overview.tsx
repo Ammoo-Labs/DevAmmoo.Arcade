@@ -1,82 +1,105 @@
 "use client";
 
-import { useState } from "react";
-import { 
-  TrendingUp, 
-  DollarSign, 
-  ShoppingBag, 
-  Users, 
+import { useState, useEffect } from "react";
+import {
+  TrendingUp,
+  DollarSign,
+  ShoppingBag,
   Eye,
   Star,
   Calendar,
-  BarChart3
+  BarChart3,
+  Package,
 } from "lucide-react";
+import { useAuth } from "@/ui/components/auth/auth-context";
+import { getSellerOrders } from "@/lib/api/orders";
+import { getMyProducts } from "@/lib/api/products";
+import { getWallet } from "@/lib/api/payouts";
+import { BackendOrder, BackendProduct, BackendWallet } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/client";
 
 interface StatCard {
   title: string;
   value: string;
-  change: string;
-  trend: "up" | "down";
   icon: React.ComponentType<{ className?: string }>;
 }
 
-const statsData: StatCard[] = [
-  {
-    title: "Total Revenue",
-    value: "$12,345",
-    change: "+12.5%",
-    trend: "up",
-    icon: DollarSign
-  },
-  {
-    title: "Total Orders",
-    value: "234",
-    change: "+8.3%",
-    trend: "up",
-    icon: ShoppingBag
-  },
-  {
-    title: "Total Products",
-    value: "42",
-    change: "+3.2%",
-    trend: "up",
-    icon: Eye
-  },
-  {
-    title: "Customer Rating",
-    value: "4.8",
-    change: "+0.2",
-    trend: "up",
-    icon: Star
+function getStatusColor(status: string) {
+  switch (status.toLowerCase()) {
+    case "completed": return "bg-green-100 text-green-800";
+    case "shipped": return "bg-blue-100 text-blue-800";
+    case "packaged":
+    case "processing": return "bg-yellow-100 text-yellow-800";
+    case "on_hold": return "bg-orange-100 text-orange-800";
+    case "cancelled": return "bg-red-100 text-red-800";
+    case "pending": return "bg-gray-100 text-gray-800";
+    default: return "bg-gray-100 text-gray-800";
   }
-];
-
-const recentOrders = [
-  { id: "#ORD-001", customer: "Alice Johnson", product: "Vintage Leather Jacket", amount: "$299.99", status: "Delivered", date: "2024-10-07" },
-  { id: "#ORD-002", customer: "Bob Smith", product: "Minimalist Watch", amount: "$159.99", status: "Shipped", date: "2024-10-07" },
-  { id: "#ORD-003", customer: "Carol Davis", product: "Handcrafted Necklace", amount: "$79.99", status: "Processing", date: "2024-10-06" },
-  { id: "#ORD-004", customer: "David Wilson", product: "Designer Sneakers", amount: "$199.99", status: "Pending", date: "2024-10-06" },
-];
-
-const topProducts = [
-  { name: "Vintage Leather Jacket", sales: 45, revenue: "$13,495.55" },
-  { name: "Designer Sneakers", sales: 38, revenue: "$7,599.62" },
-  { name: "Minimalist Watch", sales: 32, revenue: "$5,119.68" },
-  { name: "Streetwear Hoodie", sales: 28, revenue: "$2,519.72" },
-];
+}
 
 export default function ShopOverview() {
+  const { accessToken } = useAuth();
   const [timeRange, setTimeRange] = useState("7d");
+  const [orders, setOrders] = useState<BackendOrder[]>([]);
+  const [products, setProducts] = useState<BackendProduct[]>([]);
+  const [wallet, setWallet] = useState<BackendWallet | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "delivered": return "bg-green-100 text-green-800";
-      case "shipped": return "bg-blue-100 text-blue-800";
-      case "processing": return "bg-yellow-100 text-yellow-800";
-      case "pending": return "bg-gray-100 text-gray-800";
-      default: return "bg-gray-100 text-gray-800";
-    }
-  };
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    (async () => {
+      setIsLoading(true);
+      setLoadError("");
+      try {
+        const [ordersData, productsData, walletData] = await Promise.all([
+          getSellerOrders(accessToken),
+          getMyProducts(accessToken),
+          getWallet(accessToken),
+        ]);
+        if (cancelled) return;
+        setOrders(ordersData);
+        setProducts(productsData);
+        setWallet(walletData);
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof ApiError ? err.message : "Failed to load dashboard data.");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [accessToken]);
+
+  const totalRevenue = wallet ? wallet.total : 0;
+  const totalOrders = orders.length;
+  const totalProducts = products.length;
+  const reviewedProducts = products.filter((p) => p.reviewCount > 0);
+  const avgRating = reviewedProducts.length
+    ? reviewedProducts.reduce((sum, p) => sum + Number(p.rating), 0) / reviewedProducts.length
+    : 0;
+
+  const statsData: StatCard[] = [
+    { title: "Total Revenue", value: `$${totalRevenue.toFixed(2)}`, icon: DollarSign },
+    { title: "Total Orders", value: String(totalOrders), icon: ShoppingBag },
+    { title: "Total Products", value: String(totalProducts), icon: Eye },
+    { title: "Customer Rating", value: avgRating ? avgRating.toFixed(1) : "—", icon: Star },
+  ];
+
+  const recentOrders = [...orders]
+    .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())
+    .slice(0, 4);
+
+  const topProducts = [...products]
+    .sort((a, b) => b.sales - a.sales)
+    .slice(0, 4)
+    .map((p) => ({
+      name: p.name,
+      sales: p.sales,
+      revenue: p.sales * Number(p.price),
+    }));
+
+  const maxSales = Math.max(1, ...topProducts.map((p) => p.sales));
 
   return (
     <div className="space-y-8">
@@ -84,12 +107,12 @@ export default function ShopOverview() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Shop Overview</h1>
-          <p className="text-gray-600">Monitor your shop's performance and analytics</p>
+          <p className="text-gray-600">Monitor your shop&apos;s performance and analytics</p>
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <Calendar className="w-4 h-4 text-gray-500" />
-          <select 
+          <select
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:border-transparent"
@@ -102,6 +125,18 @@ export default function ShopOverview() {
         </div>
       </div>
 
+      {loadError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <p className="text-sm text-red-700">{loadError}</p>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+        </div>
+      ) : (
+      <>
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statsData.map((stat, index) => {
@@ -117,13 +152,6 @@ export default function ShopOverview() {
                   <Icon className="w-6 h-6 text-black" />
                 </div>
               </div>
-              <div className="flex items-center mt-4">
-                <TrendingUp className={`w-4 h-4 ${stat.trend === 'up' ? 'text-green-500' : 'text-red-500'}`} />
-                <span className={`text-sm font-medium ml-1 ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
-                  {stat.change}
-                </span>
-                <span className="text-sm text-gray-500 ml-1">from last period</span>
-              </div>
             </div>
           );
         })}
@@ -134,29 +162,38 @@ export default function ShopOverview() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-gray-900">Recent Orders</h3>
-            <button className="text-sm text-black hover:underline">View all</button>
           </div>
-          
-          <div className="space-y-4">
-            {recentOrders.map((order) => (
-              <div key={order.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-gray-900">{order.id}</p>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                      {order.status}
-                    </span>
+
+          {recentOrders.length === 0 ? (
+            <div className="text-center py-8">
+              <Package className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 text-sm">No orders yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {recentOrders.map((order) => (
+                <div key={order.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium text-gray-900 font-mono text-sm">{order.id}</p>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(order.status)}`}>
+                        {order.status.replace("_", " ")}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600">{order.customerName}</p>
+                    <p className="text-sm text-gray-500">
+                      {order.items[0]?.name}
+                      {order.items.length > 1 ? ` +${order.items.length - 1} more` : ""}
+                    </p>
                   </div>
-                  <p className="text-sm text-gray-600">{order.customer}</p>
-                  <p className="text-sm text-gray-500">{order.product}</p>
+                  <div className="text-right">
+                    <p className="font-semibold text-gray-900">${Number(order.total).toFixed(2)}</p>
+                    <p className="text-sm text-gray-500">{new Date(order.orderDate).toLocaleDateString()}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-semibold text-gray-900">{order.amount}</p>
-                  <p className="text-sm text-gray-500">{order.date}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Top Products */}
@@ -165,26 +202,33 @@ export default function ShopOverview() {
             <h3 className="text-lg font-semibold text-gray-900">Top Selling Products</h3>
             <BarChart3 className="w-5 h-5 text-gray-400" />
           </div>
-          
-          <div className="space-y-4">
-            {topProducts.map((product, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">{product.name}</p>
-                  <p className="text-sm text-gray-500">{product.sales} sales</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold text-gray-900">{product.revenue}</p>
-                  <div className="w-20 bg-gray-200 rounded-full h-2 mt-1">
-                    <div 
-                      className="bg-black h-2 rounded-full" 
-                      style={{ width: `${(product.sales / 50) * 100}%` }}
-                    ></div>
+
+          {topProducts.length === 0 ? (
+            <div className="text-center py-8">
+              <Package className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 text-sm">No products yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {topProducts.map((product, index) => (
+                <div key={index} className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">{product.name}</p>
+                    <p className="text-sm text-gray-500">{product.sales} sales</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-gray-900">${product.revenue.toFixed(2)}</p>
+                    <div className="w-20 bg-gray-200 rounded-full h-2 mt-1">
+                      <div
+                        className="bg-black h-2 rounded-full"
+                        style={{ width: `${(product.sales / maxSales) * 100}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -199,6 +243,8 @@ export default function ShopOverview() {
           </div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

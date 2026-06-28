@@ -28,13 +28,38 @@ import {
 } from "lucide-react";
 import { ActionButton } from "@/ui/components/button";
 import Link from "next/link";
-import {
-  getOrders,
-  getStatusLabel,
-  SellerOrder,
-  OrderStatus,
-  StatusHistoryEntry,
-} from "@/ui/components/seller-dashboard/seller-store";
+import { getMyOrders } from "@/lib/api/orders";
+import { BackendOrder } from "@/lib/api/types";
+import { getFollowedShops, FollowedShop } from "@/lib/api/shops";
+
+type OrderStatus =
+  | "pending"
+  | "on_hold"
+  | "processing"
+  | "packaged"
+  | "shipped"
+  | "completed"
+  | "cancelled";
+
+interface StatusHistoryEntry {
+  status: OrderStatus;
+  timestamp: string;
+  note?: string;
+}
+
+const STATUS_LABELS: Record<OrderStatus, string> = {
+  pending: "New / Pending",
+  on_hold: "On Hold",
+  processing: "Processing / Packaged",
+  packaged: "Packaged",
+  shipped: "Shipped / Dispatched",
+  completed: "Completed / Finalized",
+  cancelled: "Cancelled",
+};
+
+function getStatusLabel(status: OrderStatus): string {
+  return STATUS_LABELS[status];
+}
 
 const STATUS_CFG: Record<OrderStatus, { icon: React.ReactNode; badge: string }> = {
   pending:    { icon: <Clock className="w-3.5 h-3.5" />,        badge: "bg-yellow-100 text-yellow-800" },
@@ -56,7 +81,7 @@ interface ProfileForm {
 }
 
 export default function ProfilePage() {
-  const { user, isAuthenticated, logout, updateUser, uploadAvatar } = useAuth();
+  const { user, isAuthenticated, logout, updateUser, uploadAvatar, accessToken } = useAuth();
   const router = useRouter();
   const photoInputRef = useRef<HTMLInputElement>(null);
 
@@ -67,7 +92,8 @@ export default function ProfilePage() {
   const [form, setForm] = useState<ProfileForm>({
     name: "", email: "", phone: "", address: "", postalCode: "", city: "",
   });
-  const [orders, setOrders] = useState<SellerOrder[]>([]);
+  const [orders, setOrders] = useState<BackendOrder[]>([]);
+  const [followedShops, setFollowedShops] = useState<FollowedShop[]>([]);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
   useEffect(() => {
@@ -84,10 +110,14 @@ export default function ProfilePage() {
         postalCode: (user as any).postalCode ?? "",
         city: (user as any).city ?? "",
       });
-      const allOrders = getOrders();
-      setOrders(allOrders.filter((o) => o.customer.email === user.email));
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    getMyOrders(accessToken).then(setOrders).catch(() => setOrders([]));
+    getFollowedShops(accessToken).then(setFollowedShops).catch(() => setFollowedShops([]));
+  }, [accessToken]);
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -308,16 +338,43 @@ export default function ProfilePage() {
           {/* Followed Shops */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Followed Shops</h3>
-            <div className="text-center py-8">
-              <Store className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500 text-sm">No followed shops yet</p>
-              <Link
-                href="/products"
-                className="text-sm text-gray-900 font-medium hover:underline mt-2 inline-block"
-              >
-                Browse products
-              </Link>
-            </div>
+            {followedShops.length === 0 ? (
+              <div className="text-center py-8">
+                <Store className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 text-sm">No followed shops yet</p>
+                <Link
+                  href="/products"
+                  className="text-sm text-gray-900 font-medium hover:underline mt-2 inline-block"
+                >
+                  Browse products
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {followedShops.map(({ shop }) => (
+                  <Link
+                    key={shop.id}
+                    href={`/shop/${shop.slug}`}
+                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-gray-100 overflow-hidden flex-shrink-0">
+                      {shop.profileImage ? (
+                        <img src={shop.profileImage} alt={shop.shopName} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs font-semibold text-gray-500">
+                          {shop.shopName.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{shop.shopName}</p>
+                      <p className="text-xs text-gray-400">{shop._count.products} products</p>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -342,8 +399,10 @@ export default function ProfilePage() {
           ) : (
             <div className="divide-y divide-gray-100">
               {orders.map((order) => {
-                const cfg = STATUS_CFG[order.status];
+                const status = order.status as OrderStatus;
+                const cfg = STATUS_CFG[status];
                 const isExpanded = expandedOrder === order.id;
+                const statusHistory = order.statusHistory as unknown as StatusHistoryEntry[];
 
                 return (
                   <div key={order.id}>
@@ -361,7 +420,7 @@ export default function ProfilePage() {
                               className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.badge}`}
                             >
                               {cfg.icon}
-                              {getStatusLabel(order.status)}
+                              {getStatusLabel(status)}
                             </span>
                             {order.trackingNumber && (
                               <span className="text-xs text-gray-400 font-mono">
@@ -370,8 +429,8 @@ export default function ProfilePage() {
                             )}
                           </div>
                           <p className="text-xs text-gray-400 mt-1">
-                            {order.orderDate} · {order.products.length} item
-                            {order.products.length > 1 ? "s" : ""} · ${order.total.toFixed(2)}
+                            {new Date(order.orderDate).toLocaleDateString()} · {order.items.length} item
+                            {order.items.length > 1 ? "s" : ""} · ${Number(order.total).toFixed(2)}
                           </p>
                         </div>
                         {isExpanded ? (
@@ -386,21 +445,21 @@ export default function ProfilePage() {
                       <div className="px-6 pb-6 space-y-5 bg-gray-50 border-t border-gray-100">
                         {/* Items */}
                         <div className="space-y-2 pt-4">
-                          {order.products.map((p, i) => (
+                          {order.items.map((item) => (
                             <div
-                              key={i}
+                              key={item.id}
                               className="flex justify-between items-start bg-white rounded-lg border border-gray-200 p-3"
                             >
                               <div>
-                                <p className="text-sm font-medium text-gray-900">{p.name}</p>
+                                <p className="text-sm font-medium text-gray-900">{item.name}</p>
                                 <p className="text-xs text-gray-500">
-                                  Qty: {p.quantity}
-                                  {p.size ? ` · Size: ${p.size}` : ""}
-                                  {p.color ? ` · ${p.color}` : ""}
+                                  Qty: {item.quantity}
+                                  {item.size ? ` · Size: ${item.size}` : ""}
+                                  {item.color ? ` · ${item.color}` : ""}
                                 </p>
                               </div>
                               <p className="text-sm font-semibold text-gray-900">
-                                ${(p.price * p.quantity).toFixed(2)}
+                                ${(Number(item.price) * item.quantity).toFixed(2)}
                               </p>
                             </div>
                           ))}
@@ -410,17 +469,17 @@ export default function ProfilePage() {
                         <div className="bg-white rounded-lg border border-gray-200 p-3 text-sm space-y-1">
                           <div className="flex justify-between text-gray-500">
                             <span>Subtotal</span>
-                            <span>${order.subtotal.toFixed(2)}</span>
+                            <span>${Number(order.subtotal).toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between text-gray-500">
                             <span>Shipping</span>
                             <span>
-                              {order.shipping === 0 ? "Free" : `$${order.shipping.toFixed(2)}`}
+                              {Number(order.shipping) === 0 ? "Free" : `$${Number(order.shipping).toFixed(2)}`}
                             </span>
                           </div>
                           <div className="flex justify-between font-bold text-gray-900 border-t border-gray-100 pt-1 mt-1">
                             <span>Total</span>
-                            <span>${order.total.toFixed(2)}</span>
+                            <span>${Number(order.total).toFixed(2)}</span>
                           </div>
                         </div>
 
@@ -433,9 +492,9 @@ export default function ProfilePage() {
                             Order Timeline
                           </h4>
                           <div className="relative space-y-0">
-                            {order.statusHistory.map((entry: StatusHistoryEntry, idx: number) => {
+                            {statusHistory.map((entry, idx) => {
                               const eCfg = STATUS_CFG[entry.status];
-                              const isLast = idx === order.statusHistory.length - 1;
+                              const isLast = idx === statusHistory.length - 1;
                               return (
                                 <div key={idx} className="flex gap-3 pb-4 relative">
                                   {!isLast && (

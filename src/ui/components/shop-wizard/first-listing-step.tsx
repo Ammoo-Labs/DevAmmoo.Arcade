@@ -8,8 +8,9 @@ import { LISTING_CATEGORIES } from "@/ui/components/product/categories";
 interface FirstListingStepProps {
   data: ShopWizardData;
   updateData: (data: Partial<ShopWizardData>) => void;
-  onNext: () => void;
+  onNext: () => Promise<void>;
   onPrev: () => void;
+  submitError?: string;
 }
 
 function ImageSlot({
@@ -67,10 +68,14 @@ function PreviewModal({
   product,
   onClose,
   onConfirm,
+  isSubmitting,
+  error,
 }: {
   product: ShopWizardData["firstProduct"];
   onClose: () => void;
   onConfirm: () => void;
+  isSubmitting: boolean;
+  error?: string;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
@@ -137,18 +142,29 @@ function PreviewModal({
           )}
         </div>
 
+        {error && (
+          <p className="text-sm text-red-600 mb-4">{error}</p>
+        )}
+
         <div className="flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
+            disabled={isSubmitting}
+            className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             Edit Listing
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 py-2.5 bg-black text-white rounded-xl text-sm font-medium hover:bg-gray-800 flex items-center justify-center gap-1.5"
+            disabled={isSubmitting}
+            className="flex-1 py-2.5 bg-black text-white rounded-xl text-sm font-medium hover:bg-gray-800 flex items-center justify-center gap-1.5 disabled:opacity-50"
           >
-            <CheckCircle className="w-4 h-4" /> Review & Confirm
+            {isSubmitting ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+            ) : (
+              <CheckCircle className="w-4 h-4" />
+            )}
+            {isSubmitting ? "Submitting..." : "Review & Confirm"}
           </button>
         </div>
       </div>
@@ -161,11 +177,13 @@ export default function FirstListingStep({
   updateData,
   onNext,
   onPrev,
+  submitError,
 }: FirstListingStepProps) {
   const product = data.firstProduct;
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPreview, setShowPreview] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const frontRef = useRef<HTMLInputElement>(null);
   const backRef = useRef<HTMLInputElement>(null);
@@ -253,9 +271,16 @@ export default function FirstListingStep({
     if (validate()) setShowPreview(true);
   };
 
-  const handleConfirm = () => {
-    setShowPreview(false);
-    onNext();
+  const handleConfirm = async () => {
+    setIsSubmitting(true);
+    try {
+      await onNext();
+      setShowPreview(false);
+    } catch {
+      // Keep the preview modal open so the user can see the error and retry.
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -464,7 +489,13 @@ export default function FirstListingStep({
       </div>
 
       {showPreview && (
-        <PreviewModal product={product} onClose={() => setShowPreview(false)} onConfirm={handleConfirm} />
+        <PreviewModal
+          product={product}
+          onClose={() => setShowPreview(false)}
+          onConfirm={handleConfirm}
+          isSubmitting={isSubmitting}
+          error={submitError}
+        />
       )}
     </div>
   );

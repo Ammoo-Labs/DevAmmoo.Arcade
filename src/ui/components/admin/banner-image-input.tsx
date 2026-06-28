@@ -3,51 +3,45 @@ import { useState, useEffect } from 'react';
 
 interface Props {
   value?: string;
-  onFileSelected: (file: File) => void;
-  onRemove?: () => void;
+  onChange: (url: string) => void;
 }
 
-export function BannerImageInput({ value, onFileSelected, onRemove }: Props) {
-  const [preview, setPreview] = useState<string | undefined>(value);
+// NOTE: The backend has no generic "upload an arbitrary image and get a URL
+// back" endpoint (only avatar/product/shop/order-proof uploads exist), and
+// CreateBannerDto/UpdateBannerDto expect imageUrl as an already-hosted URL
+// string. Until a dedicated banner upload endpoint exists, admins must paste
+// a URL to an image hosted elsewhere.
+export function BannerImageInput({ value, onChange }: Props) {
+  const [preview, setPreview] = useState<string>(value ?? '');
 
   useEffect(() => {
-    setPreview(value);
-    // revoke object URLs when component unmounts is handled by caller if needed
+    setPreview(value ?? '');
   }, [value]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (f) {
-      const url = URL.createObjectURL(f);
-      setPreview(url);
-      onFileSelected(f);
-    }
-  };
-
   return (
-    <div>
-      {preview ? (
-        <div className="mb-3">
-          <div className="w-full h-40 bg-gray-100 rounded overflow-hidden mb-2">
-            <img src={preview} alt="Banner preview" className="w-full h-full object-cover" />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="px-3 py-2 bg-gray-200 rounded cursor-pointer text-sm">
-              Choose different image
-              <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
-            </label>
-            {onRemove && (
-              <button onClick={onRemove} className="px-3 py-2 text-sm text-red-700">
-                Remove
-              </button>
-            )}
-          </div>
+    <div className="space-y-2">
+      <input
+        type="text"
+        value={preview}
+        onChange={(e) => {
+          setPreview(e.target.value);
+          onChange(e.target.value);
+        }}
+        placeholder="https://example.com/banner-image.jpg"
+        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
+      />
+      <p className="text-xs text-gray-500">
+        Paste a URL to an already-hosted image. There is currently no built-in image upload for banners.
+      </p>
+      {preview && (
+        <div className="w-full h-40 bg-gray-100 rounded overflow-hidden">
+          <img
+            src={preview}
+            alt="Banner preview"
+            className="w-full h-full object-cover"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
         </div>
-      ) : (
-        <label className="w-full flex items-center justify-center px-4 py-6 border border-dashed rounded cursor-pointer text-sm bg-white">
-          <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
-          Choose image from device
-        </label>
       )}
     </div>
   );

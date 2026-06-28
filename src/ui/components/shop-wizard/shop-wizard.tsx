@@ -6,6 +6,10 @@ import ContactInfoStep from "./contact-info-step";
 import SocialMediaStep from "./social-media-step";
 import FirstListingStep from "./first-listing-step";
 import ApprovalWaitingStep from "./approval-waiting-step";
+import { useAuth } from "@/ui/components/auth/auth-context";
+import { createShop, updateMyShop } from "@/lib/api/shops";
+import { createProduct } from "@/lib/api/products";
+import { ApiError } from "@/lib/api/client";
 
 const WIZARD_STORAGE_KEY = "ammoo-shop-wizard";
 
@@ -161,9 +165,11 @@ function deserialise(): { step: number; data: ShopWizardData } | null {
 }
 
 export default function ShopWizard() {
+  const { accessToken } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [wizardData, setWizardData] = useState<ShopWizardData>(INITIAL_DATA);
   const [hydrated, setHydrated] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   // Restore persisted state on mount
   useEffect(() => {
@@ -187,10 +193,6 @@ export default function ShopWizard() {
     setCurrentStep((prev) => {
       const next = Math.min(prev + 1, STEPS.length);
       serialise(next, wizardData);
-      if (next === STEPS.length) {
-        // On submission clear the saved draft
-        localStorage.removeItem(WIZARD_STORAGE_KEY);
-      }
       return next;
     });
 
@@ -200,6 +202,78 @@ export default function ShopWizard() {
       serialise(next, wizardData);
       return next;
     });
+
+  // Step 4 ("Finish & Submit"): create the shop (name, contact info, ID
+  // verification, images) via POST /shops, then persist social links as a
+  // separate JSON request. Note: elevateToSeller() (called from the
+  // switch-to-selling page before this wizard mounts) only flips the user's
+  // role to seller — it no longer creates a Shop row — so createShop() here
+  // is the real shop-creation call, not an update to a pre-existing row.
+  const submitShopDetails = async () => {
+    if (!accessToken) throw new Error("Not authenticated");
+    await createShop(
+      accessToken,
+      {
+        shopName: wizardData.shopName,
+        telephone: wizardData.telephone,
+        address: wizardData.address,
+        nic: wizardData.nic,
+        idType: wizardData.idType,
+        idNumber: wizardData.idNumber,
+      },
+      {
+        profilePicture: wizardData.profilePicture ?? undefined,
+        coverPicture: wizardData.coverPicture ?? undefined,
+        idPhoto: wizardData.idPhoto ?? undefined,
+      }
+    );
+
+    // createShop's multipart body intentionally omits socialLinks (see
+    // src/lib/api/shops.ts) — persist them now via a plain JSON PUT.
+    await updateMyShop(accessToken, {
+      socialLinks: {
+        facebook: wizardData.facebook || undefined,
+        instagram: wizardData.instagram || undefined,
+        twitter: wizardData.twitter || undefined,
+        website: wizardData.website || undefined,
+      },
+    });
+  };
+
+  // Step 5 ("Review & Confirm"): create the shop's first product listing.
+  const submitFirstProduct = async () => {
+    if (!accessToken) throw new Error("Not authenticated");
+    const { firstProduct } = wizardData;
+    const images = [firstProduct.frontImage, firstProduct.backImage, ...firstProduct.galleryImages].filter(
+      (f): f is File => f instanceof File
+    );
+    await createProduct(
+      accessToken,
+      {
+        name: firstProduct.name,
+        description: firstProduct.description,
+        category: firstProduct.category,
+        price: Number(firstProduct.price),
+        stock: 1,
+        status: "active",
+      },
+      images
+    );
+  };
+
+  // Called once, when the wizard reaches the final (read-only) approval step.
+  const finalizeSubmission = async () => {
+    setSubmitError("");
+    try {
+      await submitShopDetails();
+      await submitFirstProduct();
+      localStorage.removeItem(WIZARD_STORAGE_KEY);
+      setCurrentStep(STEPS.length);
+    } catch (err) {
+      setSubmitError(err instanceof ApiError ? err.message : "Failed to submit your shop application. Please try again.");
+      throw err;
+    }
+  };
 
   if (!hydrated) return null; // avoid flash of wrong step
 
@@ -297,8 +371,9 @@ export default function ShopWizard() {
             <FirstListingStep
               data={wizardData}
               updateData={updateWizardData}
-              onNext={nextStep}
+              onNext={finalizeSubmission}
               onPrev={prevStep}
+              submitError={submitError}
             />
           )}
           {currentStep === 6 && <ApprovalWaitingStep data={wizardData} />}

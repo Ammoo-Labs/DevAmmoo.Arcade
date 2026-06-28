@@ -26,8 +26,10 @@ export default function SocialMediaStep({ data, updateData, onNext, onPrev }: So
 
   const handleFinish = async () => {
     setIsSubmitting(true);
-    
-    // Update the wizard data
+
+    // Update the wizard data — the shop profile (including these links) and the
+    // first product listing are actually submitted to the backend at the end
+    // of the next ("First Listing") step, once the listing photos are ready.
     updateData({
       facebook: formData.facebook.trim(),
       instagram: formData.instagram.trim(),
@@ -35,11 +37,8 @@ export default function SocialMediaStep({ data, updateData, onNext, onPrev }: So
       website: formData.website.trim()
     });
 
-    // Simulate API submission
-    setTimeout(() => {
-      setIsSubmitting(false);
-      onNext(); // Move to approval waiting step
-    }, 2000);
+    setIsSubmitting(false);
+    onNext();
   };
 
   const socialMediaFields = [

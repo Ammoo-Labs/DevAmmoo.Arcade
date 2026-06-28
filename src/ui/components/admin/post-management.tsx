@@ -6,21 +6,23 @@ import {
   CheckCircle,
   XCircle,
   Eye,
-  EyeOff,
   Search,
   X,
   AlertCircle,
   Clock,
 } from "lucide-react";
 import { Button } from "@/ui/components/button";
+import { useAuth } from "@/ui/components/auth/auth-context";
 import {
-  SellerProduct,
-  PostApprovalStatus,
-  getSellerProducts,
-  approveProduct,
-  rejectProduct,
-  setProductUnderReview,
-} from "@/ui/components/seller-dashboard/seller-store";
+  getAdminProducts,
+  approveProduct as apiApproveProduct,
+  rejectProduct as apiRejectProduct,
+  setProductUnderReview as apiSetProductUnderReview,
+} from "@/lib/api/admin";
+import { BackendProduct } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/client";
+
+type PostApprovalStatus = 'pending' | 'approved' | 'rejected' | 'under_review';
 
 const APPROVAL_CFG: Record<
   PostApprovalStatus,
@@ -33,26 +35,42 @@ const APPROVAL_CFG: Record<
 };
 
 export function PostManagement() {
-  const [products, setProducts] = useState<SellerProduct[]>([]);
+  const { accessToken } = useAuth();
+  const [products, setProducts] = useState<BackendProduct[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<PostApprovalStatus | "all">("all");
-  const [selectedProduct, setSelectedProduct] = useState<SellerProduct | null>(null);
-  const [rejectModalProduct, setRejectModalProduct] = useState<SellerProduct | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<BackendProduct | null>(null);
+  const [rejectModalProduct, setRejectModalProduct] = useState<BackendProduct | null>(null);
   const [rejectComment, setRejectComment] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const reload = () => setProducts(getSellerProducts());
+  const reload = async () => {
+    if (!accessToken) return;
+    setIsLoading(true);
+    setError("");
+    try {
+      const data = await getAdminProducts(accessToken);
+      setProducts(data);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load products.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     reload();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
 
   const filtered = products.filter((p) => {
     const q = searchTerm.toLowerCase();
     const matchesSearch =
       p.name.toLowerCase().includes(q) ||
       p.category.toLowerCase().includes(q) ||
-      p.sellerId.toLowerCase().includes(q);
+      (p.shop?.shopName ?? "").toLowerCase().includes(q);
     const matchesFilter = filterStatus === "all" || p.approvalStatus === filterStatus;
     return matchesSearch && matchesFilter;
   });
@@ -62,34 +80,51 @@ export function PostManagement() {
     counts[p.approvalStatus] = (counts[p.approvalStatus] ?? 0) + 1;
   });
 
-  const handleApprove = async (id: number) => {
+  const handleApprove = async (id: string) => {
+    if (!accessToken) return;
     setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 300));
-    approveProduct(id);
-    reload();
-    if (selectedProduct?.id === id) setSelectedProduct(null);
-    setIsProcessing(false);
+    setError("");
+    try {
+      const updated = await apiApproveProduct(accessToken, id);
+      setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+      if (selectedProduct?.id === id) setSelectedProduct(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to approve product.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleRejectSubmit = async () => {
-    if (!rejectModalProduct) return;
+    if (!rejectModalProduct || !accessToken) return;
     setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 300));
-    rejectProduct(rejectModalProduct.id, rejectComment);
-    reload();
-    if (selectedProduct?.id === rejectModalProduct.id) setSelectedProduct(null);
-    setRejectModalProduct(null);
-    setRejectComment("");
-    setIsProcessing(false);
+    setError("");
+    try {
+      const updated = await apiRejectProduct(accessToken, rejectModalProduct.id, rejectComment);
+      setProducts((prev) => prev.map((p) => (p.id === rejectModalProduct.id ? updated : p)));
+      if (selectedProduct?.id === rejectModalProduct.id) setSelectedProduct(null);
+      setRejectModalProduct(null);
+      setRejectComment("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to reject product.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleUnderReview = async (id: number) => {
+  const handleUnderReview = async (id: string) => {
+    if (!accessToken) return;
     setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 300));
-    setProductUnderReview(id);
-    reload();
-    if (selectedProduct?.id === id) setSelectedProduct(null);
-    setIsProcessing(false);
+    setError("");
+    try {
+      const updated = await apiSetProductUnderReview(accessToken, id);
+      setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+      if (selectedProduct?.id === id) setSelectedProduct(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update product.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -101,6 +136,12 @@ export function PostManagement() {
           <p className="text-gray-600 mt-1">Review and approve product listings before they go live</p>
         </div>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Pending notice */}
       {(counts["pending"] ?? 0) > 0 && (
@@ -143,7 +184,7 @@ export function PostManagement() {
           <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by name, category, or seller ID..."
+            placeholder="Search by name, category, or shop..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
@@ -158,7 +199,7 @@ export function PostManagement() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shop</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Approval</th>
@@ -173,8 +214,8 @@ export function PostManagement() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                          {p.image ? (
-                            <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                          {p.images?.[0] ? (
+                            <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
                               <Package className="w-4 h-4 text-gray-400" />
@@ -184,14 +225,14 @@ export function PostManagement() {
                         <div>
                           <p className="text-sm font-medium text-gray-900">{p.name}</p>
                           {p.approvalStatus === "rejected" && p.rejectionComment && (
-                            <p className="text-xs text-red-600 italic mt-0.5">"{p.rejectionComment}"</p>
+                            <p className="text-xs text-red-600 italic mt-0.5">&quot;{p.rejectionComment}&quot;</p>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{p.sellerId}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{p.shop?.shopName ?? "—"}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{p.category}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">${p.price.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">${Number(p.price).toFixed(2)}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${cfg.cls}`}>
                         {cfg.icon}
@@ -251,10 +292,16 @@ export function PostManagement() {
           </table>
         </div>
 
-        {filtered.length === 0 && (
+        {!isLoading && filtered.length === 0 && (
           <div className="text-center py-12">
             <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500 text-sm">No posts match your filter.</p>
+          </div>
+        )}
+
+        {isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
           </div>
         )}
       </div>
@@ -285,9 +332,9 @@ export function PostManagement() {
               </button>
             </div>
             <div className="p-6 space-y-4">
-              {selectedProduct.image && (
+              {selectedProduct.images?.[0] && (
                 <img
-                  src={selectedProduct.image}
+                  src={selectedProduct.images[0]}
                   alt={selectedProduct.name}
                   className="w-full h-48 object-cover rounded-lg border border-gray-200"
                 />
@@ -295,12 +342,12 @@ export function PostManagement() {
               <div className="space-y-2 text-sm">
                 {[
                   ["Name", selectedProduct.name],
-                  ["Seller ID", selectedProduct.sellerId],
+                  ["Shop", selectedProduct.shop?.shopName ?? "—"],
                   ["Category", selectedProduct.category],
-                  ["Price", `$${selectedProduct.price.toFixed(2)}`],
+                  ["Price", `$${Number(selectedProduct.price).toFixed(2)}`],
                   ["Stock", String(selectedProduct.stock)],
                   ["Status", selectedProduct.status],
-                  ["Created", selectedProduct.createdAt],
+                  ["Created", new Date(selectedProduct.createdAt).toLocaleDateString()],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between py-1 border-b border-gray-100 last:border-0">
                     <span className="text-gray-500">{k}</span>

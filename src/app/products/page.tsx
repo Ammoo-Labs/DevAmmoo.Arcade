@@ -1,14 +1,25 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Filter, Search, X } from "lucide-react";
-import { ProductCard } from "@/ui/components/product";
-import { allProducts } from "@/ui/components/product/all-products";
+import { ProductCard, Product, mapBackendProduct } from "@/ui/components/product";
+import { listProducts } from "@/lib/api/products";
 import { PRODUCT_FILTER_CATEGORIES as categories } from "@/ui/components/product/categories";
+
+type SortOption = "default" | "price-asc" | "price-desc" | "rating";
+
+const SORT_TO_BACKEND: Record<SortOption, "price_asc" | "price_desc" | "rating" | undefined> = {
+  default: undefined,
+  "price-asc": "price_asc",
+  "price-desc": "price_desc",
+  rating: "rating",
+};
 
 function ProductsContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+
   const initialSearch = searchParams.get("search") || "";
   const initialCategory = searchParams.get("category") || "All";
 
@@ -16,49 +27,64 @@ function ProductsContent() {
   const [selectedCategory, setSelectedCategory] = useState(
     categories.includes(initialCategory) ? initialCategory : "All"
   );
-  const [likedProducts, setLikedProducts] = useState<Record<number, boolean>>(
-    allProducts.reduce(
-      (acc, p) => ({ ...acc, [p.id]: p.isLiked || false }),
-      {} as Record<number, boolean>
-    )
-  );
   const [showFilters, setShowFilters] = useState(false);
-  const [sortBy, setSortBy] = useState<"default" | "price-asc" | "price-desc" | "rating">("default");
+  const [sortBy, setSortBy] = useState<SortOption>("default");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Sync URL params
+  // Sync from URL params (e.g. navigating in from a category link elsewhere)
   useEffect(() => {
     setSearchTerm(searchParams.get("search") || "");
+    const cat = searchParams.get("category") || "All";
+    setSelectedCategory(categories.includes(cat) ? cat : "All");
   }, [searchParams]);
 
-  const handleLike = (productId: number) => {
-    setLikedProducts((prev) => ({ ...prev, [productId]: !prev[productId] }));
-  };
+  // Debounce search term before hitting the backend
+  const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm), 350);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
 
-  const filteredProducts = allProducts
-    .filter((product) => {
-      const matchesCategory =
-        selectedCategory === "All" || product.category === selectedCategory;
-      const q = searchTerm.toLowerCase();
-      const matchesSearch =
-        !q ||
-        product.name.toLowerCase().includes(q) ||
-        product.creator.toLowerCase().includes(q) ||
-        product.category.toLowerCase().includes(q) ||
-        product.store?.toLowerCase().includes(q) ||
-        product.tags?.some((t) => t.toLowerCase().includes(q));
-      return matchesCategory && matchesSearch;
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, selectedCategory, sortBy]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    listProducts({
+      search: debouncedSearch || undefined,
+      category: selectedCategory === "All" ? undefined : selectedCategory,
+      sort: SORT_TO_BACKEND[sortBy],
+      page,
+      limit: 20,
     })
-    .sort((a, b) => {
-      if (sortBy === "price-asc") return a.price - b.price;
-      if (sortBy === "price-desc") return b.price - a.price;
-      if (sortBy === "rating") return b.rating - a.rating;
-      return 0;
-    });
+      .then((res) => {
+        if (cancelled) return;
+        setProducts(res.items.map(mapBackendProduct));
+        setTotal(res.total);
+        setPages(res.pages);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setProducts([]);
+        setTotal(0);
+        setPages(1);
+      })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
+  }, [debouncedSearch, selectedCategory, sortBy, page]);
 
   const clearAll = () => {
     setSearchTerm("");
     setSelectedCategory("All");
     setSortBy("default");
+    router.replace("/products");
   };
 
   const hasActiveFilters = searchTerm || selectedCategory !== "All" || sortBy !== "default";
@@ -118,7 +144,7 @@ function ProductsContent() {
             {/* Sort */}
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black bg-white"
             >
               <option value="default">Sort: Default</option>
@@ -160,7 +186,7 @@ function ProductsContent() {
       {/* Results count */}
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 pt-4">
         <p className="text-sm text-gray-500">
-          {filteredProducts.length} {filteredProducts.length === 1 ? "product" : "products"} found
+          {total} {total === 1 ? "product" : "products"} found
           {searchTerm && <> for &ldquo;<strong>{searchTerm}</strong>&rdquo;</>}
           {selectedCategory !== "All" && <> in <strong>{selectedCategory}</strong></>}
         </p>
@@ -169,7 +195,11 @@ function ProductsContent() {
       {/* Products Grid */}
       <div className="bg-gray-50 py-4 sm:py-8">
         <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 xl:px-8">
-          {filteredProducts.length === 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-black" />
+            </div>
+          ) : products.length === 0 ? (
             <div className="text-center py-16">
               <p className="text-gray-500 text-lg mb-4">No products found</p>
               <button
@@ -180,20 +210,43 @@ function ProductsContent() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4 lg:gap-6">
-              {filteredProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  isLiked={likedProducts[product.id]}
-                  onLike={handleLike}
-                  showQuickActions={true}
-                  showStore={true}
-                  size="md"
-                  variant="default"
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4 lg:gap-6">
+                {products.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    showQuickActions={true}
+                    showStore={true}
+                    size="md"
+                    variant="default"
+                  />
+                ))}
+              </div>
+
+              {/* Pagination */}
+              {pages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-8">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    Page {page} of {pages}
+                  </span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(pages, p + 1))}
+                    disabled={page >= pages}
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

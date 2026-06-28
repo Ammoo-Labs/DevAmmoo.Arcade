@@ -8,13 +8,11 @@ export interface HeroBannerLocal {
   title: string;
   description: string;
   imageUrl: string;
-  imageFile?: File | null;
   ctaText: string;
   ctaLink: string;
   isActive: boolean;
   sellerName?: string;
   salePercentage?: number;
-  validUntil?: string;
 }
 
 interface Props {
@@ -23,9 +21,10 @@ interface Props {
   onSave: () => void;
   onCancel: () => void;
   onDelete?: () => void;
+  isSaving?: boolean;
 }
 
-export default function BannerFormModal({ banner, onChange, onSave, onCancel, onDelete }: Props) {
+export default function BannerFormModal({ banner, onChange, onSave, onCancel, onDelete, isSaving }: Props) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto mx-4">
@@ -69,43 +68,24 @@ export default function BannerFormModal({ banner, onChange, onSave, onCancel, on
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Sale Percentage</label>
-              <input
-                type="number"
-                value={banner.salePercentage || ''}
-                onChange={(e) => onChange('salePercentage', parseInt(e.target.value) || 0)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
-                placeholder="e.g., 50"
-                min="0"
-                max="100"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Valid Until</label>
-              <input
-                type="date"
-                value={banner.validUntil || ''}
-                onChange={(e) => onChange('validUntil', e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Sale Percentage</label>
+            <input
+              type="number"
+              value={banner.salePercentage || ''}
+              onChange={(e) => onChange('salePercentage', parseInt(e.target.value) || 0)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
+              placeholder="e.g., 50"
+              min="0"
+              max="100"
+            />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Banner Image</label>
             <BannerImageInput
               value={banner.imageUrl}
-              onFileSelected={(file) => {
-                onChange('imageFile', file);
-                onChange('imageUrl', URL.createObjectURL(file));
-              }}
-              onRemove={() => {
-                onChange('imageFile', null);
-                onChange('imageUrl', '');
-              }}
+              onChange={(url) => onChange('imageUrl', url)}
             />
           </div>
 
@@ -161,13 +141,15 @@ export default function BannerFormModal({ banner, onChange, onSave, onCancel, on
         </div>
 
         <div className="flex justify-end space-x-3 mt-6">
-          <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+          <Button variant="secondary" onClick={onCancel} disabled={isSaving}>Cancel</Button>
           {onDelete && (
-            <Button variant="secondary" onClick={onDelete}>
+            <Button variant="secondary" onClick={onDelete} disabled={isSaving}>
               Delete
             </Button>
           )}
-          <Button variant="primary" onClick={onSave}>Save Banner</Button>
+          <Button variant="primary" onClick={onSave} disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Save Banner'}
+          </Button>
         </div>
       </div>
     </div>

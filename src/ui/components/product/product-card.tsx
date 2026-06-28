@@ -1,33 +1,68 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Heart, ShoppingCart } from "lucide-react";
 import { ProductCardProps } from "./types";
 import { useCart } from "@/ui/components/cart";
+import { useAuth } from "@/ui/components/auth/auth-context";
+import { addToWishlist, removeFromWishlist, isInWishlist } from "@/lib/api/wishlist";
 import { formatLKR } from "./currency";
 
 export default function ProductCard({
   product,
   onLike,
   onAddToCart,
-  isLiked = false,
+  isLiked,
+  showStore = true,
 }: ProductCardProps) {
   const { addToCart } = useCart();
+  const { accessToken, isAuthenticated } = useAuth();
   const router = useRouter();
+  const [liked, setLiked] = useState(isLiked ?? false);
+
+  useEffect(() => {
+    if (isLiked !== undefined) {
+      setLiked(isLiked);
+      return;
+    }
+    if (!accessToken) {
+      setLiked(false);
+      return;
+    }
+    let cancelled = false;
+    isInWishlist(accessToken, product.id)
+      .then((res) => { if (!cancelled) setLiked(res.inWishlist); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [accessToken, product.id, isLiked]);
 
   const handleLike = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!isAuthenticated || !accessToken) {
+      router.push("/signin");
+      return;
+    }
+    const next = !liked;
+    setLiked(next);
+    (next ? addToWishlist(accessToken, product.id) : removeFromWishlist(accessToken, product.id)).catch(() => {
+      setLiked(!next);
+    });
     onLike?.(product.id);
   };
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!isAuthenticated) {
+      router.push("/signin");
+      return;
+    }
     addToCart({
-      id: String(product.id),
+      id: product.id,
       name: product.name,
       price: product.price,
       originalPrice: product.originalPrice,
@@ -77,9 +112,9 @@ export default function ProductCard({
         <button
           onClick={handleLike}
           className="absolute top-2 right-2 z-10 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-          aria-label={isLiked ? "Remove from favorites" : "Add to favorites"}
+          aria-label={liked ? "Remove from favorites" : "Add to favorites"}
         >
-          <Heart className={`w-3.5 h-3.5 ${isLiked ? "fill-black text-black" : "text-gray-700"}`} />
+          <Heart className={`w-3.5 h-3.5 ${liked ? "fill-black text-black" : "text-gray-700"}`} />
         </button>
       </div>
 
@@ -88,9 +123,9 @@ export default function ProductCard({
         <h3 className="text-xs sm:text-sm font-medium text-gray-900 line-clamp-2 mb-0.5">
           {product.name}
         </h3>
-        {product.store && (
+        {showStore && product.store && (
           <Link
-            href={`/shop/${product.store.toLowerCase().replace(/\s+/g, "-")}`}
+            href={`/shop/${product.storeSlug ?? product.store.toLowerCase().replace(/\s+/g, "-")}`}
             onClick={(e) => e.stopPropagation()}
             className="text-xs text-gray-500 hover:text-black hover:underline transition-colors block mb-1.5 truncate"
           >

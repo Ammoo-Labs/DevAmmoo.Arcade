@@ -1,9 +1,5 @@
 import ShopClient from "./shop-client";
 
-export function generateStaticParams() {
-  return ["ammoo-arcade", "tech-haven", "sarahs-boutique"].map((id) => ({ id }));
-}
-
 export default async function ShopPage({
   params,
 }: {

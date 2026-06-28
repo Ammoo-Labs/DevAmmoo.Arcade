@@ -1,25 +1,50 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { listShops } from "@/lib/api/shops";
+import { BackendShop } from "@/lib/api/types";
 
-const sellers = [
-  { id: 1, name: "Urban Style Co.", category: "Fashion", rating: 4.9, sales: "2.1K" },
-  { id: 2, name: "TimeKeeper", category: "Accessories", rating: 4.8, sales: "1.8K" },
-  { id: 3, name: "Artisan Jewelry", category: "Jewelry", rating: 4.9, sales: "3.2K" },
-  { id: 4, name: "Street Vibe", category: "Streetwear", rating: 4.7, sales: "1.5K" },
-  { id: 5, name: "Home Harmony", category: "Home Decor", rating: 4.8, sales: "2.4K" },
-  { id: 6, name: "Kick Culture", category: "Footwear", rating: 4.9, sales: "2.9K" },
-  { id: 7, name: "Craft Corner", category: "Handmade", rating: 4.6, sales: "1.1K" },
-  { id: 8, name: "Luxury Silk Co.", category: "Fashion", rating: 4.8, sales: "1.7K" },
-];
+interface SellerCard {
+  id: string;
+  slug: string;
+  name: string;
+  category: string;
+  rating: number;
+  sales: string;
+}
 
-const extended = [...sellers, ...sellers, ...sellers];
+function toSellerCard(shop: BackendShop): SellerCard {
+  const productCount = shop._count?.products ?? 0;
+  return {
+    id: shop.id,
+    slug: shop.slug,
+    name: shop.shopName,
+    category: shop.shopDescription ?? "Shop",
+    rating: 4.8,
+    sales: productCount > 0 ? `${productCount} products` : "New",
+  };
+}
 
 export default function TopSellers() {
-  const [currentIndex, setCurrentIndex] = useState(sellers.length);
+  const router = useRouter();
+  const [sellers, setSellers] = useState<SellerCard[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [itemsPerView, setItemsPerView] = useState(6);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+
+  useEffect(() => {
+    listShops()
+      .then((shops) => {
+        const cards = shops.map(toSellerCard);
+        setSellers(cards);
+        setCurrentIndex(cards.length);
+      })
+      .catch(() => setSellers([]));
+  }, []);
+
+  const extended = sellers.length > 0 ? [...sellers, ...sellers, ...sellers] : [];
 
   useEffect(() => {
     const update = () => {
@@ -50,19 +75,22 @@ export default function TopSellers() {
     const t = setTimeout(() => {
       setIsTransitioning(false);
       setCurrentIndex((prev) => {
+        if (sellers.length === 0) return prev;
         if (prev >= sellers.length * 2) return sellers.length;
         if (prev <= 0) return sellers.length;
         return prev;
       });
     }, 500);
     return () => clearTimeout(t);
-  }, [isTransitioning, currentIndex]);
+  }, [isTransitioning, currentIndex, sellers.length]);
 
   useEffect(() => {
-    if (isPaused) return;
+    if (isPaused || sellers.length === 0) return;
     const interval = setInterval(goToNext, 3000);
     return () => clearInterval(interval);
-  }, [isPaused, goToNext]);
+  }, [isPaused, goToNext, sellers.length]);
+
+  if (sellers.length === 0) return null;
 
   return (
     <section className="py-5 sm:py-6 bg-gray-50 border-t border-gray-200">
@@ -105,7 +133,10 @@ export default function TopSellers() {
                   className="flex-shrink-0 px-2 sm:px-3"
                   style={{ width: `${100 / itemsPerView}%` }}
                 >
-                  <div className="flex flex-col items-center text-center cursor-pointer group py-1">
+                  <div
+                    className="flex flex-col items-center text-center cursor-pointer group py-1"
+                    onClick={() => router.push(`/shop/${seller.slug}`)}
+                  >
                     <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-gray-700 via-gray-800 to-black text-white flex items-center justify-center font-bold text-sm mb-1.5 ring-2 ring-transparent group-hover:ring-black transition-all duration-200">
                       {seller.name
                         .split(" ")

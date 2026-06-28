@@ -117,3 +117,14 @@ export function unfollowShop(token: string, shopId: string): Promise<unknown> {
 export function isFollowingShop(token: string, shopId: string): Promise<{ following: boolean }> {
   return apiFetch<{ following: boolean }>(`/shops/${shopId}/follow`, { token });
 }
+
+export interface FollowedShop {
+  createdAt: string;
+  shop: Pick<BackendShop, 'id' | 'slug' | 'shopName' | 'shopDescription' | 'profileImage' | 'bannerImage'> & {
+    _count: { products: number; followers: number };
+  };
+}
+
+export function getFollowedShops(token: string): Promise<FollowedShop[]> {
+  return apiFetch<FollowedShop[]>('/shops/me/following', { token });
+}

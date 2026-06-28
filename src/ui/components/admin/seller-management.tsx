@@ -4,142 +4,147 @@ import { useState, useEffect } from "react";
 import {
   Search,
   X,
-  CheckCircle,
-  XCircle,
   AlertCircle,
-  Eye,
-  Ban,
   DollarSign,
   Clock,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/ui/components/button";
+import { useAuth } from "@/ui/components/auth/auth-context";
 import {
-  getSellerAccountStatus,
-  setSellerAccountStatus,
-  getSellerProfile,
-  getPayoutRequests,
-  updatePayoutRequestStatus,
-  approveProfileChanges,
-  rejectProfileChanges,
-  SellerProfile,
-  PayoutRequest,
-  SellerAccountStatus,
-} from "@/ui/components/seller-dashboard/seller-store";
-import { users } from "@/data/users";
+  getAdminShops,
+  updateShopAccountStatus,
+  approveShopChanges,
+  rejectShopChanges,
+  getAdminPayoutRequests,
+  updatePayoutRequest,
+} from "@/lib/api/admin";
+import { BackendShop, BackendPayoutRequest } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/client";
 
-interface SellerRow {
-  id: string;
-  name: string;
-  shopName: string;
-  email: string;
-  phone: string;
-  address: string;
-  accountStatus: SellerAccountStatus;
-  joinDate: string;
-  profile: SellerProfile;
-  pendingProfileChange: boolean;
-}
+type SellerAccountStatus = "active" | "inactive" | "suspended" | "banned";
 
 export function SellerManagement() {
-  const [sellers, setSellers] = useState<SellerRow[]>([]);
-  const [payoutRequests, setPayoutRequests] = useState<PayoutRequest[]>([]);
+  const { accessToken } = useAuth();
+  const [shops, setShops] = useState<BackendShop[]>([]);
+  const [payoutRequests, setPayoutRequests] = useState<BackendPayoutRequest[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<SellerAccountStatus | "all">("all");
-  const [selectedSeller, setSelectedSeller] = useState<SellerRow | null>(null);
+  const [selectedSeller, setSelectedSeller] = useState<BackendShop | null>(null);
   const [activeTab, setActiveTab] = useState<"sellers" | "payouts">("sellers");
   const [expandedPayout, setExpandedPayout] = useState<string | null>(null);
   const [payoutNote, setPayoutNote] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const reload = () => {
-    const sellerUsers = users.filter((u) => u.role === "seller");
-    const rows: SellerRow[] = sellerUsers.map((u) => {
-      const profile = getSellerProfile(u.id);
-      const accountStatus = getSellerAccountStatus(u.id);
-      return {
-        id: u.id,
-        name: u.name,
-        shopName: profile.shopName ?? u.shopName ?? u.name,
-        email: profile.email ?? u.email,
-        phone: profile.phone ?? u.phone ?? "",
-        address: profile.address ?? u.address ?? "",
-        accountStatus,
-        joinDate: u.createdAt,
-        profile,
-        pendingProfileChange: profile.profileChangeStatus === "pending",
-      };
-    });
-    setSellers(rows);
-    setPayoutRequests(getPayoutRequests());
+  const reload = async () => {
+    if (!accessToken) return;
+    setIsLoading(true);
+    setError("");
+    try {
+      const [shopsData, payoutsData] = await Promise.all([
+        getAdminShops(accessToken),
+        getAdminPayoutRequests(accessToken),
+      ]);
+      setShops(shopsData);
+      setPayoutRequests(payoutsData);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load sellers.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     reload();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
 
-  const filteredSellers = sellers.filter((s) => {
+  const filteredSellers = shops.filter((s) => {
     const q = searchTerm.toLowerCase();
     const matchesSearch =
-      s.name.toLowerCase().includes(q) ||
       s.shopName.toLowerCase().includes(q) ||
-      s.email.toLowerCase().includes(q);
+      (s.shopEmail ?? s.email ?? "").toLowerCase().includes(q);
     const matchesFilter = filterStatus === "all" || s.accountStatus === filterStatus;
     return matchesSearch && matchesFilter;
   });
 
-  const STATUS_CFG: Record<SellerAccountStatus, { label: string; cls: string }> = {
+  const STATUS_CFG: Record<string, { label: string; cls: string }> = {
     active:    { label: "Active",    cls: "bg-green-100 text-green-800" },
+    inactive:  { label: "Inactive",  cls: "bg-gray-100 text-gray-800" },
     suspended: { label: "Suspended", cls: "bg-orange-100 text-orange-800" },
     banned:    { label: "Banned",    cls: "bg-red-100 text-red-800" },
   };
 
-  const PAYOUT_STATUS_CFG: Record<PayoutRequest["status"], { label: string; cls: string }> = {
+  const PAYOUT_STATUS_CFG: Record<BackendPayoutRequest["status"], { label: string; cls: string }> = {
     pending:  { label: "Pending",  cls: "bg-yellow-100 text-yellow-800" },
     approved: { label: "Approved", cls: "bg-green-100 text-green-800" },
     rejected: { label: "Rejected", cls: "bg-red-100 text-red-800" },
   };
 
-  const handleAccountAction = async (sellerId: string, status: SellerAccountStatus) => {
+  const handleAccountAction = async (shopId: string, status: SellerAccountStatus) => {
+    if (!accessToken) return;
     setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 300));
-    setSellerAccountStatus(sellerId, status);
-    reload();
-    if (selectedSeller?.id === sellerId) {
-      setSelectedSeller((prev) => prev ? { ...prev, accountStatus: status } : null);
+    setError("");
+    try {
+      const updated = await updateShopAccountStatus(accessToken, shopId, status);
+      setShops((prev) => prev.map((s) => (s.id === shopId ? updated : s)));
+      if (selectedSeller?.id === shopId) setSelectedSeller(updated);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update seller status.");
+    } finally {
+      setIsProcessing(false);
     }
-    setIsProcessing(false);
   };
 
-  const handleApproveProfile = async (sellerId: string) => {
+  const handleApproveProfile = async (shopId: string) => {
+    if (!accessToken) return;
     setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 300));
-    approveProfileChanges(sellerId);
-    reload();
-    setSelectedSeller(null);
-    setIsProcessing(false);
+    setError("");
+    try {
+      await approveShopChanges(accessToken, shopId);
+      await reload();
+      setSelectedSeller(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to approve profile changes.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleRejectProfile = async (sellerId: string) => {
+  const handleRejectProfile = async (shopId: string) => {
+    if (!accessToken) return;
     setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 300));
-    rejectProfileChanges(sellerId);
-    reload();
-    setSelectedSeller(null);
-    setIsProcessing(false);
+    setError("");
+    try {
+      await rejectShopChanges(accessToken, shopId);
+      await reload();
+      setSelectedSeller(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to reject profile changes.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handlePayoutAction = async (id: string, status: PayoutRequest["status"]) => {
+  const handlePayoutAction = async (id: string, status: "approved" | "rejected") => {
+    if (!accessToken) return;
     setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 300));
-    updatePayoutRequestStatus(id, status, payoutNote || undefined);
-    setPayoutNote("");
-    reload();
-    setIsProcessing(false);
+    setError("");
+    try {
+      const updated = await updatePayoutRequest(accessToken, id, status, payoutNote || undefined);
+      setPayoutRequests((prev) => prev.map((r) => (r.id === id ? updated : r)));
+      setPayoutNote("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update payout request.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const pendingProfileCount = sellers.filter((s) => s.pendingProfileChange).length;
+  const pendingProfileCount = shops.filter((s) => s.profileChangeStatus === "pending").length;
   const pendingPayouts = payoutRequests.filter((r) => r.status === "pending").length;
 
   return (
@@ -149,6 +154,12 @@ export function SellerManagement() {
         <h1 className="text-3xl font-bold text-gray-900">Seller Management</h1>
         <p className="text-gray-600 mt-1">Manage sellers, approve profile changes, and handle payout requests</p>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Alert banners */}
       {pendingProfileCount > 0 && (
@@ -194,7 +205,7 @@ export function SellerManagement() {
                 <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search by name, shop, or email..."
+                  placeholder="Search by shop or email..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
@@ -202,7 +213,7 @@ export function SellerManagement() {
               </div>
               <select
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as any)}
+                onChange={(e) => setFilterStatus(e.target.value as SellerAccountStatus | "all")}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
               >
                 <option value="all">All Status</option>
@@ -228,13 +239,12 @@ export function SellerManagement() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filteredSellers.map((s) => {
-                    const sc = STATUS_CFG[s.accountStatus];
+                    const sc = STATUS_CFG[s.accountStatus] ?? STATUS_CFG.active;
                     return (
                       <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3">
                           <p className="text-sm font-medium text-gray-900">{s.shopName}</p>
-                          <p className="text-xs text-gray-500">{s.name}</p>
-                          <p className="text-xs text-gray-400">{s.email}</p>
+                          <p className="text-xs text-gray-400">{s.shopEmail ?? s.email ?? "—"}</p>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${sc.cls}`}>
@@ -242,10 +252,10 @@ export function SellerManagement() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">
-                          {new Date(s.joinDate).toLocaleDateString()}
+                          {new Date(s.createdAt).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-3">
-                          {s.pendingProfileChange && (
+                          {s.profileChangeStatus === "pending" && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700">
                               <Clock className="w-3 h-3" /> Profile Review
                             </span>
@@ -309,9 +319,15 @@ export function SellerManagement() {
               </table>
             </div>
 
-            {filteredSellers.length === 0 && (
+            {!isLoading && filteredSellers.length === 0 && (
               <div className="text-center py-12">
                 <p className="text-gray-500 text-sm">No sellers match your filter.</p>
+              </div>
+            )}
+
+            {isLoading && (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
               </div>
             )}
           </div>
@@ -319,9 +335,9 @@ export function SellerManagement() {
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {[
-              { label: "Total Sellers",   value: sellers.length,                                     color: "text-gray-900" },
-              { label: "Active",          value: sellers.filter((s) => s.accountStatus === "active").length, color: "text-green-700" },
-              { label: "Suspended/Banned",value: sellers.filter((s) => s.accountStatus !== "active").length, color: "text-red-700" },
+              { label: "Total Sellers",   value: shops.length,                                     color: "text-gray-900" },
+              { label: "Active",          value: shops.filter((s) => s.accountStatus === "active").length, color: "text-green-700" },
+              { label: "Suspended/Banned",value: shops.filter((s) => s.accountStatus !== "active").length, color: "text-red-700" },
             ].map((card) => (
               <div key={card.label} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm text-center">
                 <p className={`text-3xl font-bold ${card.color}`}>{card.value}</p>
@@ -351,24 +367,16 @@ export function SellerManagement() {
                   >
                     <div className="flex items-center gap-4 text-left">
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{req.shopName}</p>
-                        <p className="text-xs text-gray-500">{req.sellerName} · {req.requestDate}</p>
+                        <p className="text-sm font-medium text-gray-900">Seller ID: {req.sellerId}</p>
+                        <p className="text-xs text-gray-500">{new Date(req.requestDate).toLocaleDateString()}</p>
                       </div>
-                      <span className="text-base font-bold text-gray-900">${req.amount.toFixed(2)}</span>
+                      <span className="text-base font-bold text-gray-900">${Number(req.amount).toFixed(2)}</span>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pc.cls}`}>{pc.label}</span>
                     </div>
                     {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
                   </button>
                   {isOpen && (
                     <div className="px-5 pb-5 border-t border-gray-100 space-y-3">
-                      {req.bankDetails && (
-                        <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
-                          <p className="font-medium text-gray-700">Bank Details</p>
-                          {req.bankDetails.bankName && <p className="text-gray-600">Bank: {req.bankDetails.bankName}</p>}
-                          {req.bankDetails.accountHolder && <p className="text-gray-600">Holder: {req.bankDetails.accountHolder}</p>}
-                          {req.bankDetails.accountNumber && <p className="text-gray-600">Account: {req.bankDetails.accountNumber}</p>}
-                        </div>
-                      )}
                       {req.adminNote && (
                         <p className="text-sm text-gray-600 italic">Admin note: {req.adminNote}</p>
                       )}
@@ -423,15 +431,15 @@ export function SellerManagement() {
             </div>
             <div className="p-6 space-y-4">
               {/* Pending profile change notice */}
-              {selectedSeller.pendingProfileChange && (
+              {selectedSeller.profileChangeStatus === "pending" && (
                 <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-3">
                   <p className="text-sm font-semibold text-orange-800">Pending Profile Changes</p>
                   <p className="text-sm text-orange-700">
                     This seller has submitted contact detail changes that require your approval.
                   </p>
-                  {selectedSeller.profile.pendingProfileChanges && (
+                  {selectedSeller.pendingProfileChanges && (
                     <div className="space-y-1 text-sm">
-                      {Object.entries(selectedSeller.profile.pendingProfileChanges).map(([k, v]) => (
+                      {Object.entries(selectedSeller.pendingProfileChanges).map(([k, v]) => (
                         <p key={k} className="text-orange-800">
                           <span className="font-medium capitalize">{k}:</span> {String(v)}
                         </p>
@@ -464,13 +472,13 @@ export function SellerManagement() {
               <div className="space-y-2 text-sm">
                 {[
                   ["Shop Name",  selectedSeller.shopName],
-                  ["Full Name",  selectedSeller.name],
-                  ["Email",      selectedSeller.email],
-                  ["Phone",      selectedSeller.phone || "—"],
-                  ["Address",    selectedSeller.address || "—"],
-                  ["Joined",     new Date(selectedSeller.joinDate).toLocaleDateString()],
+                  ["Email",      selectedSeller.shopEmail ?? selectedSeller.email ?? "—"],
+                  ["Phone",      selectedSeller.shopPhone ?? selectedSeller.phone ?? "—"],
+                  ["Address",    selectedSeller.shopAddress ?? selectedSeller.address ?? "—"],
+                  ["Joined",     new Date(selectedSeller.createdAt).toLocaleDateString()],
                   ["Status",     selectedSeller.accountStatus],
-                  ["Courier",    selectedSeller.profile.courierService || "—"],
+                  ["Courier",    selectedSeller.courierService || "—"],
+                  ["Products",   String(selectedSeller._count?.products ?? 0)],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between py-1.5 border-b border-gray-100 last:border-0">
                     <span className="text-gray-500">{k}</span>

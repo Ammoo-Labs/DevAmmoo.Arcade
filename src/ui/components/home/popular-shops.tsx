@@ -1,9 +1,18 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { listShops } from "@/lib/api/shops";
+
 export default function PopularShops() {
-  const shops = [
-    "Nike", "Adidas", "Zara", "H&M", "Uniqlo", "Gucci", "Prada", "Louis Vuitton",
-    "Chanel", "Versace", "Armani", "Calvin Klein", "Tommy Hilfiger", "Ralph Lauren",
-    "Levi's", "Gap", "Forever 21", "Urban Outfitters", "American Eagle", "Hollister"
-  ];
+  const [shops, setShops] = useState<string[]>([]);
+
+  useEffect(() => {
+    listShops()
+      .then((res) => setShops(res.map((shop) => shop.shopName)))
+      .catch(() => setShops([]));
+  }, []);
+
+  if (shops.length === 0) return null;
 
   return (
     <section className="bg-black py-2 overflow-hidden">

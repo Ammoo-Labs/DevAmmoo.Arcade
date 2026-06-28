@@ -17,21 +17,20 @@ import {
   Info,
 } from "lucide-react";
 import { ActionButton } from "@/ui/components/button";
+import { useAuth } from "@/ui/components/auth/auth-context";
 import {
-  BankDetails,
-  PayoutTransaction,
+  getWallet,
+  getPayoutTransactions,
   getBankDetails,
   saveBankDetails,
-  getTransactions,
-  addTransaction,
-  getWalletBalance,
-  MINIMUM_WITHDRAWAL,
-} from "@/ui/components/seller-dashboard/seller-store";
-
-const SELLER_ID = "seller-sarah";
+  createPayoutRequest,
+  SaveBankDetailsPayload,
+} from "@/lib/api/payouts";
+import { BackendPayoutTransaction, BackendWallet } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/client";
 
 const TXN_STATUS_CONFIG: Record<
-  PayoutTransaction["status"],
+  string,
   { icon: React.ReactNode; badge: string; label: string }
 > = {
   completed: {
@@ -51,7 +50,7 @@ const TXN_STATUS_CONFIG: Record<
   },
 };
 
-const emptyBank: BankDetails = {
+const emptyBank: SaveBankDetailsPayload = {
   bankName: "",
   accountHolder: "",
   accountNumber: "",
@@ -61,43 +60,94 @@ const emptyBank: BankDetails = {
 };
 
 export default function Payouts() {
-  const [wallet, setWallet] = useState({ total: 0, pending: 0, available: 0 });
-  const [transactions, setTransactions] = useState<PayoutTransaction[]>([]);
-  const [bankDetails, setBankDetails] = useState<BankDetails>(emptyBank);
-  const [form, setForm] = useState<BankDetails>(emptyBank);
+  const { accessToken } = useAuth();
+  const [wallet, setWallet] = useState<BackendWallet>({
+    total: 0,
+    pending: 0,
+    available: 0,
+    platformFeePercent: 10,
+    minimumWithdrawal: 50,
+  });
+  const [transactions, setTransactions] = useState<BackendPayoutTransaction[]>([]);
+  const [bankDetails, setBankDetails] = useState<SaveBankDetailsPayload | null>(null);
+  const [form, setForm] = useState<SaveBankDetailsPayload>(emptyBank);
   const [isEditingBank, setIsEditingBank] = useState(false);
   const [isSavingBank, setIsSavingBank] = useState(false);
   const [bankSaved, setBankSaved] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState("");
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
 
-  const reload = () => {
-    setWallet(getWalletBalance(SELLER_ID));
-    setTransactions(getTransactions(SELLER_ID));
-    const details = getBankDetails(SELLER_ID);
-    setBankDetails(details);
-    setForm(details);
+  const reload = async () => {
+    if (!accessToken) return;
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      const [walletData, txns, bank] = await Promise.all([
+        getWallet(accessToken),
+        getPayoutTransactions(accessToken),
+        getBankDetails(accessToken),
+      ]);
+      setWallet(walletData);
+      setTransactions(txns);
+      if (bank) {
+        const mapped: SaveBankDetailsPayload = {
+          bankName: bank.bankName,
+          accountHolder: bank.accountHolder,
+          accountNumber: bank.accountNumber,
+          routingNumber: bank.routingNumber ?? "",
+          accountType: bank.accountType,
+          iban: bank.iban ?? "",
+        };
+        setBankDetails(mapped);
+        setForm(mapped);
+      } else {
+        setBankDetails(null);
+        setForm(emptyBank);
+      }
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : "Failed to load payout data.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     reload();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
 
   const handleSaveBank = async () => {
+    if (!accessToken) return;
     setIsSavingBank(true);
-    await new Promise((r) => setTimeout(r, 700));
-    saveBankDetails(SELLER_ID, form);
-    setBankDetails(form);
-    setIsEditingBank(false);
-    setIsSavingBank(false);
-    setBankSaved(true);
-    setTimeout(() => setBankSaved(false), 3000);
+    try {
+      const saved = await saveBankDetails(accessToken, form);
+      const mapped: SaveBankDetailsPayload = {
+        bankName: saved.bankName,
+        accountHolder: saved.accountHolder,
+        accountNumber: saved.accountNumber,
+        routingNumber: saved.routingNumber ?? "",
+        accountType: saved.accountType,
+        iban: saved.iban ?? "",
+      };
+      setBankDetails(mapped);
+      setForm(mapped);
+      setIsEditingBank(false);
+      setBankSaved(true);
+      setTimeout(() => setBankSaved(false), 3000);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to save bank details.");
+    } finally {
+      setIsSavingBank(false);
+    }
   };
 
   const handleWithdraw = async () => {
+    if (!accessToken) return;
     setWithdrawError("");
     setWithdrawSuccess(false);
     const amount = parseFloat(withdrawAmount);
@@ -106,9 +156,9 @@ export default function Payouts() {
       setWithdrawError("Please enter a valid withdrawal amount.");
       return;
     }
-    if (amount < MINIMUM_WITHDRAWAL) {
+    if (amount < wallet.minimumWithdrawal) {
       setWithdrawError(
-        `Minimum withdrawal is $${MINIMUM_WITHDRAWAL.toFixed(2)}. Your requested amount is below the threshold.`
+        `Minimum withdrawal is $${wallet.minimumWithdrawal.toFixed(2)}. Your requested amount is below the threshold.`
       );
       return;
     }
@@ -118,35 +168,31 @@ export default function Payouts() {
       );
       return;
     }
-    if (!bankDetails.accountNumber || !bankDetails.bankName) {
+    if (!bankDetails?.accountNumber || !bankDetails?.bankName) {
       setWithdrawError("Please save your bank details before requesting a payout.");
       return;
     }
 
     setIsWithdrawing(true);
-    await new Promise((r) => setTimeout(r, 1200));
-
-    const txn: PayoutTransaction = {
-      id: `TXN-${Date.now()}`,
-      amount,
-      date: new Date().toISOString().split("T")[0],
-      status: "pending",
-      method: "Bank Transfer",
-    };
-    addTransaction(SELLER_ID, txn);
-    reload();
-    setWithdrawAmount("");
-    setIsWithdrawing(false);
-    setWithdrawSuccess(true);
-    setTimeout(() => setWithdrawSuccess(false), 4000);
+    try {
+      await createPayoutRequest(accessToken, amount);
+      await reload();
+      setWithdrawAmount("");
+      setWithdrawSuccess(true);
+      setTimeout(() => setWithdrawSuccess(false), 4000);
+    } catch (err) {
+      setWithdrawError(err instanceof ApiError ? err.message : "Failed to submit withdrawal request.");
+    } finally {
+      setIsWithdrawing(false);
+    }
   };
 
   const canWithdraw =
-    wallet.available >= MINIMUM_WITHDRAWAL &&
-    !!bankDetails.accountNumber &&
-    !!bankDetails.bankName;
+    wallet.available >= wallet.minimumWithdrawal &&
+    !!bankDetails?.accountNumber &&
+    !!bankDetails?.bankName;
 
-  const maskedAccount = bankDetails.accountNumber
+  const maskedAccount = bankDetails?.accountNumber
     ? `•••• •••• ${bankDetails.accountNumber.slice(-4)}`
     : "—";
 
@@ -158,6 +204,19 @@ export default function Payouts() {
         <p className="text-gray-600">Manage your earnings, bank details, and withdrawal requests</p>
       </div>
 
+      {/* Load error */}
+      {loadError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <p className="text-sm text-red-700">{loadError}</p>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+        </div>
+      ) : (
+      <>
       {/* Wallet Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
@@ -167,7 +226,7 @@ export default function Payouts() {
             icon: TrendingUp,
             iconBg: "bg-green-100",
             iconColor: "text-green-600",
-            note: "After 10% platform fee",
+            note: `After ${wallet.platformFeePercent}% platform fee`,
           },
           {
             label: "In Escrow / Pending",
@@ -183,7 +242,7 @@ export default function Payouts() {
             icon: DollarSign,
             iconBg: "bg-black",
             iconColor: "text-white",
-            note: `Min. withdrawal: $${MINIMUM_WITHDRAWAL}`,
+            note: `Min. withdrawal: $${wallet.minimumWithdrawal}`,
             highlight: true,
           },
         ].map((card) => {
@@ -201,7 +260,7 @@ export default function Payouts() {
                 >
                   <Icon className={`w-5 h-5 ${card.iconColor}`} />
                 </div>
-                {card.highlight && wallet.available < MINIMUM_WITHDRAWAL && (
+                {card.highlight && wallet.available < wallet.minimumWithdrawal && (
                   <span className="flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
                     <Lock className="w-3 h-3" />
                     Locked
@@ -217,14 +276,14 @@ export default function Payouts() {
       </div>
 
       {/* Minimum Withdrawal Warning */}
-      {wallet.available < MINIMUM_WITHDRAWAL && (
+      {wallet.available < wallet.minimumWithdrawal && (
         <div className="flex items-start gap-3 bg-orange-50 border border-orange-200 rounded-xl p-4">
           <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-orange-800">Withdrawal Not Available Yet</p>
             <p className="text-sm text-orange-700 mt-1">
               Your available balance (${wallet.available.toFixed(2)}) is below the minimum withdrawal
-              threshold of <strong>${MINIMUM_WITHDRAWAL.toFixed(2)}</strong>. Complete more orders to
+              threshold of <strong>${wallet.minimumWithdrawal.toFixed(2)}</strong>. Complete more orders to
               increase your balance.
             </p>
           </div>
@@ -247,7 +306,7 @@ export default function Payouts() {
               <span className="absolute left-3 top-2.5 text-gray-400 font-medium">$</span>
               <input
                 type="number"
-                min={MINIMUM_WITHDRAWAL}
+                min={wallet.minimumWithdrawal}
                 max={wallet.available}
                 step="0.01"
                 value={withdrawAmount}
@@ -255,13 +314,13 @@ export default function Payouts() {
                   setWithdrawAmount(e.target.value);
                   setWithdrawError("");
                 }}
-                placeholder={`${MINIMUM_WITHDRAWAL}.00`}
+                placeholder={`${wallet.minimumWithdrawal}.00`}
                 className="w-full pl-7 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
                 disabled={!canWithdraw}
               />
             </div>
             <p className="text-xs text-gray-400 mt-1">
-              Min: ${MINIMUM_WITHDRAWAL.toFixed(2)} · Available: ${wallet.available.toFixed(2)}
+              Min: ${wallet.minimumWithdrawal.toFixed(2)} · Available: ${wallet.available.toFixed(2)}
             </p>
           </div>
 
@@ -272,7 +331,7 @@ export default function Payouts() {
                 <button
                   key={pct}
                   onClick={() => setWithdrawAmount(amount.toFixed(2))}
-                  disabled={!canWithdraw || amount < MINIMUM_WITHDRAWAL}
+                  disabled={!canWithdraw || amount < wallet.minimumWithdrawal}
                   className="flex-1 text-xs font-medium border border-gray-200 rounded-lg py-1.5 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {pct}%
@@ -308,7 +367,7 @@ export default function Payouts() {
             <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-blue-700">
               Payouts are sent to your registered bank account. Processing takes 2–5 business days.
-              A 10% platform commission has already been deducted from your earnings.
+              A {wallet.platformFeePercent}% platform commission has already been deducted from your earnings.
             </p>
           </div>
 
@@ -350,12 +409,12 @@ export default function Payouts() {
             /* View mode */
             <div className="space-y-3">
               {[
-                ["Bank Name", bankDetails.bankName || "—"],
-                ["Account Holder", bankDetails.accountHolder || "—"],
+                ["Bank Name", bankDetails?.bankName || "—"],
+                ["Account Holder", bankDetails?.accountHolder || "—"],
                 ["Account Number", maskedAccount],
-                ["Routing / SWIFT", bankDetails.routingNumber || "—"],
-                ["Account Type", bankDetails.accountType ? bankDetails.accountType.charAt(0).toUpperCase() + bankDetails.accountType.slice(1) : "—"],
-                ["IBAN", bankDetails.iban || "—"],
+                ["Routing / SWIFT", bankDetails?.routingNumber || "—"],
+                ["Account Type", bankDetails?.accountType ? bankDetails.accountType.charAt(0).toUpperCase() + bankDetails.accountType.slice(1) : "—"],
+                ["IBAN", bankDetails?.iban || "—"],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between py-2 border-b border-gray-50">
                   <span className="text-sm text-gray-500">{label}</span>
@@ -363,7 +422,7 @@ export default function Payouts() {
                 </div>
               ))}
 
-              {!bankDetails.accountNumber && (
+              {!bankDetails?.accountNumber && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex gap-2 mt-4">
                   <AlertTriangle className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-yellow-800">
@@ -380,18 +439,20 @@ export default function Payouts() {
           ) : (
             /* Edit mode */
             <div className="space-y-4">
-              {[
-                { key: "bankName", label: "Bank Name", placeholder: "e.g. Commercial Bank of Ceylon" },
-                { key: "accountHolder", label: "Account Holder Name", placeholder: "Full name as on account" },
-                { key: "accountNumber", label: "Account Number", placeholder: "e.g. 1234567890" },
-                { key: "routingNumber", label: "Routing / SWIFT / BIC Code", placeholder: "e.g. CCEYLKLX" },
-                { key: "iban", label: "IBAN (optional)", placeholder: "International Bank Account Number" },
-              ].map(({ key, label, placeholder }) => (
+              {(
+                [
+                  { key: "bankName", label: "Bank Name", placeholder: "e.g. Commercial Bank of Ceylon" },
+                  { key: "accountHolder", label: "Account Holder Name", placeholder: "Full name as on account" },
+                  { key: "accountNumber", label: "Account Number", placeholder: "e.g. 1234567890" },
+                  { key: "routingNumber", label: "Routing / SWIFT / BIC Code", placeholder: "e.g. CCEYLKLX" },
+                  { key: "iban", label: "IBAN (optional)", placeholder: "International Bank Account Number" },
+                ] as const
+              ).map(({ key, label, placeholder }) => (
                 <div key={key}>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
                   <input
                     type="text"
-                    value={(form as any)[key]}
+                    value={form[key] ?? ""}
                     onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
                     placeholder={placeholder}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black text-sm"
@@ -404,7 +465,7 @@ export default function Payouts() {
                 <select
                   value={form.accountType}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, accountType: e.target.value as BankDetails["accountType"] }))
+                    setForm((f) => ({ ...f, accountType: e.target.value as SaveBankDetailsPayload["accountType"] }))
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black text-sm"
                 >
@@ -416,7 +477,7 @@ export default function Payouts() {
               <div className="flex gap-3 pt-2">
                 <ActionButton
                   variant="secondary"
-                  onClick={() => { setIsEditingBank(false); setForm(bankDetails); }}
+                  onClick={() => { setIsEditingBank(false); setForm(bankDetails ?? emptyBank); }}
                   className="flex-1"
                 >
                   Cancel
@@ -461,12 +522,12 @@ export default function Payouts() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {transactions.map((txn) => {
-                  const cfg = TXN_STATUS_CONFIG[txn.status];
+                  const cfg = TXN_STATUS_CONFIG[txn.status] ?? TXN_STATUS_CONFIG.pending;
                   return (
                     <tr key={txn.id} className="hover:bg-gray-50 transition-colors">
                       <td className="py-3 px-6 font-mono text-sm text-gray-700">{txn.id}</td>
-                      <td className="py-3 px-6 text-sm text-gray-600">{txn.date}</td>
-                      <td className="py-3 px-6 font-semibold text-gray-900">${txn.amount.toFixed(2)}</td>
+                      <td className="py-3 px-6 text-sm text-gray-600">{new Date(txn.date).toLocaleDateString()}</td>
+                      <td className="py-3 px-6 font-semibold text-gray-900">${Number(txn.amount).toFixed(2)}</td>
                       <td className="py-3 px-6 text-sm text-gray-600">{txn.method}</td>
                       <td className="py-3 px-6">
                         <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${cfg.badge}`}>
@@ -482,6 +543,8 @@ export default function Payouts() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

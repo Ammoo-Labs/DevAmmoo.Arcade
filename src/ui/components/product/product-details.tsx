@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
   Star,
@@ -14,10 +14,14 @@ import {
   Ruler,
   User,
 } from "lucide-react";
-import { Product } from "./types";
+import { useRouter } from "next/navigation";
+import { Product, mapBackendProduct } from "./types";
 import { useCart } from "@/ui/components/cart";
-import { sampleProducts } from "./sample-data";
+import { useAuth } from "@/ui/components/auth/auth-context";
+import { addToWishlist, removeFromWishlist, isInWishlist } from "@/lib/api/wishlist";
+import { listProducts } from "@/lib/api/products";
 import ProductCard from "./product-card";
+import ProductReviews from "./product-reviews";
 import { formatLKR } from "./currency";
 
 interface ProductDetailsProps {
@@ -244,6 +248,8 @@ function FitFinderModal({
 
 export default function ProductDetails({ product, onBack }: ProductDetailsProps) {
   const { addToCart } = useCart();
+  const { accessToken, isAuthenticated } = useAuth();
+  const router = useRouter();
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
@@ -251,16 +257,55 @@ export default function ProductDetails({ product, onBack }: ProductDetailsProps)
   const [isLiked, setIsLiked] = useState(product.isLiked || false);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [showFitFinder, setShowFitFinder] = useState(false);
+  const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      setIsLiked(false);
+      return;
+    }
+    let cancelled = false;
+    isInWishlist(accessToken, product.id)
+      .then((res) => { if (!cancelled) setIsLiked(res.inWishlist); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [accessToken, product.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listProducts({ category: product.category, limit: 8 })
+      .then((res) => {
+        if (cancelled) return;
+        setSimilarProducts(
+          res.items.filter((p) => p.id !== product.id).slice(0, 4).map(mapBackendProduct),
+        );
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [product.id, product.category]);
+
+  const handleToggleLike = () => {
+    if (!isAuthenticated || !accessToken) {
+      router.push("/signin");
+      return;
+    }
+    const next = !isLiked;
+    setIsLiked(next);
+    (next ? addToWishlist(accessToken, product.id) : removeFromWishlist(accessToken, product.id)).catch(() => {
+      setIsLiked(!next);
+    });
+  };
 
   const toSrc = (img: typeof product.image) =>
     typeof img === "string" ? img : img.src;
 
-  const images = [
-    product.image,
-    ...(product.image2 ? [product.image2] : []),
-    `https://picsum.photos/seed/${product.id}-detail-a/400/500`,
-    `https://picsum.photos/seed/${product.id}-detail-b/400/500`,
-  ];
+  const images =
+    product.images && product.images.length > 0
+      ? product.images
+      : [
+          product.image,
+          ...(product.image2 && product.image2 !== product.image ? [product.image2] : []),
+        ];
 
   const sizes = ["XS", "S", "M", "L", "XL"];
   const colors = ["Black", "White", "Navy", "Gray"];
@@ -270,9 +315,13 @@ export default function ProductDetails({ product, onBack }: ProductDetailsProps)
     : 0;
 
   const handleAddToCart = () => {
+    if (!isAuthenticated) {
+      router.push("/signin");
+      return;
+    }
     addToCart(
       {
-        id: String(product.id),
+        id: product.id,
         name: product.name,
         price: product.price,
         originalPrice: product.originalPrice,
@@ -316,7 +365,7 @@ export default function ProductDetails({ product, onBack }: ProductDetailsProps)
                 </span>
               )}
               <button
-                onClick={() => setIsLiked(!isLiked)}
+                onClick={handleToggleLike}
                 className="absolute top-4 right-4 w-9 h-9 bg-white shadow-md rounded-full flex items-center justify-center hover:bg-gray-50 transition-colors"
               >
                 <Heart
@@ -494,7 +543,7 @@ export default function ProductDetails({ product, onBack }: ProductDetailsProps)
                 {product.inStock ? "Add to Cart" : "Out of Stock"}
               </button>
               <button
-                onClick={() => setIsLiked(!isLiked)}
+                onClick={handleToggleLike}
                 className="w-12 h-12 border border-gray-300 rounded-xl flex items-center justify-center hover:border-gray-500 transition-colors"
               >
                 <Heart
@@ -525,17 +574,19 @@ export default function ProductDetails({ product, onBack }: ProductDetailsProps)
         </div>
 
         {/* Similar Products */}
-        <div className="border-t border-gray-200 mt-12 pt-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">Similar Products</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {sampleProducts
-              .filter((p) => p.id !== product.id && p.category === product.category)
-              .slice(0, 4)
-              .map((p) => (
+        {similarProducts.length > 0 && (
+          <div className="border-t border-gray-200 mt-12 pt-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">Similar Products</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              {similarProducts.map((p) => (
                 <ProductCard key={p.id} product={p} />
               ))}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Reviews */}
+        <ProductReviews productId={product.id} />
       </div>
 
       {showSizeGuide && <SizeGuideModal onClose={() => setShowSizeGuide(false)} />}

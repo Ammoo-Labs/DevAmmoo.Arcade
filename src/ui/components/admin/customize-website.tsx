@@ -1,149 +1,206 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/ui/components/button';
+import { useAuth } from '@/ui/components/auth/auth-context';
+import {
+  getSiteSettings,
+  updateSiteSettings,
+  getBanners,
+  createBanner,
+  updateBanner,
+  deleteBanner,
+  toggleBanner,
+} from '@/lib/api/admin';
+import { BackendSiteSettings, BackendHeroBanner } from '@/lib/api/types';
+import { ApiError } from '@/lib/api/client';
+import BannerFormModal, { HeroBannerLocal } from '@/ui/components/admin/banner-form-modal';
 
-interface HeroBanner {
-  id: string;
-  title: string;
-  description: string;
-  imageUrl: string;
-  imageFile?: File | null;
-  ctaText: string;
-  ctaLink: string;
-  isActive: boolean;
-  sellerName?: string;
-  salePercentage?: number;
-  validUntil?: string;
-}
+const emptySettings: BackendSiteSettings = {
+  id: '',
+  siteName: '',
+  siteDescription: '',
+  logoUrl: '',
+  footerText: '',
+  contactEmail: '',
+  maintenanceMode: false,
+  allowRegistration: true,
+  enableNotifications: true,
+  updatedAt: '',
+};
 
-import BannerImageInput from '@/ui/components/admin/banner-image-input';
-import BannerFormModal from '@/ui/components/admin/banner-form-modal';
-interface SiteSettings {
-  siteName: string;
-  siteDescription: string;
-  logoUrl: string;
-  footerText: string;
-  contactEmail: string;
-  maintenanceMode: boolean;
-  allowRegistration: boolean;
-  enableNotifications: boolean;
-}
+const emptyBanner: HeroBannerLocal = {
+  id: '',
+  title: '',
+  description: '',
+  imageUrl: '',
+  ctaText: 'Shop Now',
+  ctaLink: '/products',
+  isActive: false,
+  sellerName: '',
+  salePercentage: 0,
+};
 
 export function CustomizeWebsite() {
-  const [settings, setSettings] = useState<SiteSettings>({
-    siteName: 'Ammoo Arcade',
-    siteDescription: 'Your one-stop shop for gaming and electronics',
-    logoUrl: '',
-    footerText: '© 2024 Ammoo Arcade. All rights reserved.',
-    contactEmail: 'contact@ammooarcade.com',
-    maintenanceMode: false,
-    allowRegistration: true,
-    enableNotifications: true
-  });
-
-  const [heroBanners, setHeroBanners] = useState<HeroBanner[]>([
-    {
-      id: '1',
-      title: 'Summer Sale Extravaganza',
-      description: 'Get up to 50% off on gaming peripherals and electronics',
-      imageUrl: '/images/hero-banner-1.jpg',
-      ctaText: 'Shop Now',
-      ctaLink: '/products',
-      isActive: true,
-      sellerName: 'TechGear Pro',
-      salePercentage: 50,
-      validUntil: '2024-12-31'
-    },
-    {
-      id: '2',
-      title: 'New Gaming Laptops Arrived',
-      description: 'Discover the latest gaming laptops with cutting-edge technology',
-      imageUrl: '/images/hero-banner-2.jpg',
-      ctaText: 'Explore',
-      ctaLink: '/products/laptops',
-      isActive: false,
-      sellerName: 'GamerHub',
-      salePercentage: 30,
-      validUntil: '2024-11-30'
-    }
-  ]);
-
+  const { accessToken } = useAuth();
+  const [settings, setSettings] = useState<BackendSiteSettings>(emptySettings);
+  const [heroBanners, setHeroBanners] = useState<BackendHeroBanner[]>([]);
   const [activeTab, setActiveTab] = useState<'general' | 'hero' | 'features'>('general');
-  const [editingBanner, setEditingBanner] = useState<HeroBanner | null>(null);
+  const [editingBanner, setEditingBanner] = useState<HeroBannerLocal | null>(null);
   const [showBannerForm, setShowBannerForm] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingBanner, setIsSavingBanner] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
 
-  const handleInputChange = (field: keyof SiteSettings, value: string | boolean) => {
+  const reload = async () => {
+    if (!accessToken) return;
+    setIsLoading(true);
+    setError('');
+    try {
+      const [settingsRes, bannersRes] = await Promise.all([
+        getSiteSettings(accessToken),
+        getBanners(accessToken),
+      ]);
+      setSettings(settingsRes);
+      setHeroBanners(bannersRes);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load website settings.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
+
+  const handleInputChange = (field: keyof BackendSiteSettings, value: string | boolean) => {
     setSettings(prev => ({
       ...prev,
-      [field]: value
+      [field]: value,
     }));
   };
 
-  const handleBannerChange = (field: keyof HeroBanner, value: any) => {
+  const handleSave = async () => {
+    if (!accessToken) return;
+    setIsSaving(true);
+    setError('');
+    try {
+      const updated = await updateSiteSettings(accessToken, {
+        siteName: settings.siteName,
+        siteDescription: settings.siteDescription,
+        logoUrl: settings.logoUrl ?? undefined,
+        footerText: settings.footerText,
+        contactEmail: settings.contactEmail,
+        maintenanceMode: settings.maintenanceMode,
+        allowRegistration: settings.allowRegistration,
+        enableNotifications: settings.enableNotifications,
+      });
+      setSettings(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to save settings.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleBannerChange = (field: keyof HeroBannerLocal, value: any) => {
     if (editingBanner) {
       setEditingBanner(prev => prev ? ({ ...prev, [field]: value }) : null);
     }
   };
 
-  const handleSave = () => {
-    // Handle save settings
-    console.log('Saving settings:', settings);
-    console.log('Saving hero banners:', heroBanners);
+  const handleAddBanner = () => {
+    setEditingBanner({ ...emptyBanner });
+    setShowBannerForm(true);
   };
 
-  const handleAddBanner = () => {
+  const handleEditBanner = (banner: BackendHeroBanner) => {
     setEditingBanner({
-      id: Date.now().toString(),
-      title: '',
-      description: '',
-      imageUrl: '',
-      ctaText: 'Shop Now',
-      ctaLink: '/products',
-      isActive: false,
-      sellerName: '',
-      salePercentage: 0,
-      validUntil: ''
+      id: banner.id,
+      title: banner.title,
+      description: banner.description,
+      imageUrl: banner.imageUrl,
+      ctaText: banner.ctaText,
+      ctaLink: banner.ctaLink,
+      isActive: banner.isActive,
+      sellerName: banner.sellerName ?? '',
+      salePercentage: banner.salePercentage ?? 0,
     });
     setShowBannerForm(true);
   };
 
-  const handleEditBanner = (banner: HeroBanner) => {
-    setEditingBanner(banner);
-    setShowBannerForm(true);
-  };
-
-  const handleSaveBanner = () => {
-    if (editingBanner) {
-      setHeroBanners(prev => {
-        const existingIndex = prev.findIndex(b => b.id === editingBanner.id);
-        if (existingIndex >= 0) {
-          const updated = [...prev];
-          updated[existingIndex] = editingBanner;
-          return updated;
-        } else {
-          return [...prev, editingBanner];
-        }
-      });
+  const handleSaveBanner = async () => {
+    if (!editingBanner || !accessToken) return;
+    setIsSavingBanner(true);
+    setError('');
+    try {
+      const payload = {
+        title: editingBanner.title,
+        description: editingBanner.description,
+        imageUrl: editingBanner.imageUrl,
+        ctaText: editingBanner.ctaText,
+        ctaLink: editingBanner.ctaLink,
+        isActive: editingBanner.isActive,
+        sellerName: editingBanner.sellerName,
+        salePercentage: editingBanner.salePercentage,
+      };
+      if (editingBanner.id === '') {
+        const created = await createBanner(accessToken, payload);
+        setHeroBanners(prev => [created, ...prev]);
+      } else {
+        const updated = await updateBanner(accessToken, editingBanner.id, payload);
+        setHeroBanners(prev => prev.map(b => (b.id === updated.id ? updated : b)));
+      }
       setEditingBanner(null);
       setShowBannerForm(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to save banner.');
+    } finally {
+      setIsSavingBanner(false);
     }
   };
 
-  const handleDeleteBanner = (id: string) => {
-    setHeroBanners(prev => prev.filter(b => b.id !== id));
+  const handleDeleteBanner = async (id: string) => {
+    if (!accessToken || id === '') {
+      setEditingBanner(null);
+      setShowBannerForm(false);
+      return;
+    }
+    setIsSavingBanner(true);
+    setError('');
+    try {
+      await deleteBanner(accessToken, id);
+      setHeroBanners(prev => prev.filter(b => b.id !== id));
+      setEditingBanner(null);
+      setShowBannerForm(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to delete banner.');
+    } finally {
+      setIsSavingBanner(false);
+    }
   };
 
-  const handleToggleBannerStatus = (id: string) => {
-    setHeroBanners(prev => prev.map(banner => 
-      banner.id === id ? { ...banner, isActive: !banner.isActive } : banner
-    ));
+  const handleToggleBannerStatus = async (id: string) => {
+    if (!accessToken) return;
+    setError('');
+    try {
+      const updated = await toggleBanner(accessToken, id);
+      setHeroBanners(prev => prev.map(b => (b.id === id ? updated : b)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to toggle banner.');
+    }
   };
 
   const tabs = [
     { id: 'general', label: 'General Settings', icon: '⚙️' },
     { id: 'hero', label: 'Hero Banners', icon: '🎨' },
-    { id: 'features', label: 'Features', icon: '🔧' }
-  ];
+    { id: 'features', label: 'Features', icon: '🔧' },
+  ] as const;
 
   return (
     <div className="space-y-6">
@@ -153,19 +210,37 @@ export function CustomizeWebsite() {
           <h1 className="text-3xl font-bold text-gray-900">Customize Website</h1>
           <p className="text-gray-600 mt-1">Manage your website settings and appearance</p>
         </div>
-        <Button variant="primary" onClick={handleSave}>
-          Save Changes
-        </Button>
+        {activeTab !== 'hero' && (
+          <Button variant="primary" onClick={handleSave} disabled={isSaving || isLoading}>
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        )}
       </div>
 
-      {/* Tabs */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {saved && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-700">
+          Settings saved successfully.
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+        </div>
+      ) : (
       <div className="bg-white rounded-lg shadow-md border border-gray-200">
         <div className="border-b border-gray-200">
           <nav className="flex space-x-8 px-6">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm ${
                   activeTab === tab.id
                     ? 'border-black text-black'
@@ -254,8 +329,8 @@ export function CustomizeWebsite() {
                         <div className="flex items-center space-x-3 mb-2">
                           <h3 className="text-lg font-medium text-gray-900">{banner.title}</h3>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            banner.isActive 
-                              ? 'bg-green-100 text-green-800' 
+                            banner.isActive
+                              ? 'bg-green-100 text-green-800'
                               : 'bg-gray-100 text-gray-800'
                           }`}>
                             {banner.isActive ? 'Active' : 'Inactive'}
@@ -266,11 +341,8 @@ export function CustomizeWebsite() {
                           {banner.sellerName && (
                             <span>👤 Seller: {banner.sellerName}</span>
                           )}
-                          {banner.salePercentage && (
+                          {!!banner.salePercentage && (
                             <span>🏷️ Sale: {banner.salePercentage}% off</span>
-                          )}
-                          {banner.validUntil && (
-                            <span>📅 Valid until: {banner.validUntil}</span>
                           )}
                         </div>
                       </div>
@@ -278,8 +350,8 @@ export function CustomizeWebsite() {
                         <button
                           onClick={() => handleToggleBannerStatus(banner.id)}
                           className={`px-3 py-1 rounded text-sm font-medium ${
-                            banner.isActive 
-                              ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200' 
+                            banner.isActive
+                              ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
                               : 'bg-green-100 text-green-800 hover:bg-green-200'
                           }`}
                         >
@@ -320,7 +392,8 @@ export function CustomizeWebsite() {
                   onChange={(field, value) => handleBannerChange(field as any, value)}
                   onSave={handleSaveBanner}
                   onCancel={() => { setShowBannerForm(false); setEditingBanner(null); }}
-                  onDelete={() => { handleDeleteBanner(editingBanner.id); setShowBannerForm(false); setEditingBanner(null); }}
+                  onDelete={() => handleDeleteBanner(editingBanner.id)}
+                  isSaving={isSavingBanner}
                 />
               )}
             </div>
@@ -389,6 +462,7 @@ export function CustomizeWebsite() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -15,17 +15,12 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/ui/components/button";
-import {
-  getOrders,
-  getStatusLabel,
-  getBuyerNotifications,
-  SellerOrder,
-  OrderStatus,
-  getUserOverride,
-} from "@/ui/components/seller-dashboard/seller-store";
-import { users } from "@/data/users";
+import { useAuth } from "@/ui/components/auth/auth-context";
+import { getUsers, getAllOrders } from "@/lib/api/admin";
+import { BackendAdminUser, BackendOrder } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/client";
 
-const STATUS_CFG: Record<OrderStatus, { badge: string; icon: React.ReactNode }> = {
+const STATUS_CFG: Record<string, { badge: string; icon: React.ReactNode }> = {
   pending:    { badge: "bg-yellow-100 text-yellow-800",  icon: <Clock className="w-3.5 h-3.5" /> },
   on_hold:    { badge: "bg-orange-100 text-orange-800",  icon: <PauseCircle className="w-3.5 h-3.5" /> },
   processing: { badge: "bg-blue-100 text-blue-800",      icon: <Package className="w-3.5 h-3.5" /> },
@@ -35,62 +30,74 @@ const STATUS_CFG: Record<OrderStatus, { badge: string; icon: React.ReactNode }> 
   cancelled:  { badge: "bg-red-100 text-red-800",        icon: <AlertCircle className="w-3.5 h-3.5" /> },
 };
 
+function getStatusLabel(status: string): string {
+  return status
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 interface CustomerRow {
   id: string;
   name: string;
-  email: string;
-  phone: string;
-  address: string;
   joinDate: string;
   isVerified: boolean;
-  orders: SellerOrder[];
-  notificationCount: number;
+  accountStatus: string;
+  orders: BackendOrder[];
 }
 
 export function CustomerManagement() {
+  const { accessToken } = useAuth();
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerRow | null>(null);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const allOrders = getOrders();
-    const customerUsers = users.filter((u) => u.role === "customer");
+    if (!accessToken) return;
+    let cancelled = false;
 
-    const rows: CustomerRow[] = customerUsers.map((u) => {
-      const override = getUserOverride(u.id);
-      const customerOrders = allOrders.filter(
-        (o) => o.customer.email === (override.name ? u.email : u.email)
-      );
-      const notifications = getBuyerNotifications(u.email);
-      return {
-        id: u.id,
-        name: override.name ?? u.name,
-        email: u.email,
-        phone: override.phone ?? u.phone ?? "",
-        address: override.address ?? u.address ?? "",
-        joinDate: u.createdAt,
-        isVerified: u.isVerified,
-        orders: customerOrders,
-        notificationCount: notifications.length,
-      };
-    });
+    const load = async () => {
+      setIsLoading(true);
+      setError("");
+      try {
+        const [customerUsers, allOrders] = await Promise.all([
+          getUsers(accessToken, "customer"),
+          getAllOrders(accessToken),
+        ]);
+        if (cancelled) return;
 
-    setCustomers(rows);
-  }, []);
+        const rows: CustomerRow[] = customerUsers.map((u: BackendAdminUser) => ({
+          id: u.id,
+          name: u.name,
+          joinDate: u.createdAt,
+          isVerified: u.isVerified,
+          accountStatus: u.accountStatus,
+          orders: allOrders.filter((o) => o.buyerId === u.id),
+        }));
+
+        setCustomers(rows);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load customers.");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, [accessToken]);
 
   const filtered = customers.filter((c) => {
     const q = searchTerm.toLowerCase();
-    return (
-      c.name.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      c.phone.toLowerCase().includes(q)
-    );
+    return c.name.toLowerCase().includes(q);
   });
 
   const totalOrders = customers.reduce((s, c) => s + c.orders.length, 0);
   const totalSpend = customers.reduce(
-    (s, c) => s + c.orders.filter((o) => o.status === "completed").reduce((os, o) => os + o.total, 0),
+    (s, c) => s + c.orders.filter((o) => o.status === "completed").reduce((os, o) => os + Number(o.total), 0),
     0
   );
 
@@ -101,6 +108,12 @@ export function CustomerManagement() {
         <h1 className="text-3xl font-bold text-gray-900">Customer Management</h1>
         <p className="text-gray-600 mt-1">View customer profiles, order history, and activity</p>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -122,7 +135,7 @@ export function CustomerManagement() {
           <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search customers by name or email..."
+            placeholder="Search customers by name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
@@ -153,7 +166,6 @@ export function CustomerManagement() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-gray-900">{c.name}</p>
-                        <p className="text-xs text-gray-500">{c.email}</p>
                       </div>
                     </div>
                   </td>
@@ -182,10 +194,16 @@ export function CustomerManagement() {
           </table>
         </div>
 
-        {filtered.length === 0 && (
+        {!isLoading && filtered.length === 0 && (
           <div className="text-center py-12">
             <User className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500 text-sm">No customers found.</p>
+          </div>
+        )}
+
+        {isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
           </div>
         )}
       </div>
@@ -209,7 +227,6 @@ export function CustomerManagement() {
                 </div>
                 <div>
                   <h4 className="text-lg font-bold text-gray-900">{selectedCustomer.name}</h4>
-                  <p className="text-sm text-gray-500">{selectedCustomer.email}</p>
                   {selectedCustomer.isVerified && (
                     <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded-full mt-1">
                       <CheckCircle2 className="w-3 h-3" /> Verified
@@ -221,15 +238,13 @@ export function CustomerManagement() {
               {/* Details */}
               <div className="space-y-1.5 text-sm">
                 {[
-                  ["Phone",    selectedCustomer.phone    || "—"],
-                  ["Address",  selectedCustomer.address  || "—"],
+                  ["Account Status", selectedCustomer.accountStatus],
                   ["Joined",   new Date(selectedCustomer.joinDate).toLocaleDateString()],
                   ["Orders",   String(selectedCustomer.orders.length)],
-                  ["Activity", `${selectedCustomer.notificationCount} notifications`],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between py-1.5 border-b border-gray-100 last:border-0">
                     <span className="text-gray-500">{k}</span>
-                    <span className="text-gray-900 font-medium">{v}</span>
+                    <span className="text-gray-900 font-medium capitalize">{v}</span>
                   </div>
                 ))}
               </div>
@@ -242,7 +257,7 @@ export function CustomerManagement() {
                 ) : (
                   <div className="space-y-2">
                     {selectedCustomer.orders.map((order) => {
-                      const cfg = STATUS_CFG[order.status];
+                      const cfg = STATUS_CFG[order.status] ?? STATUS_CFG.pending;
                       const isOpen = expandedOrder === order.id;
                       return (
                         <div key={order.id} className="border border-gray-200 rounded-lg overflow-hidden">
@@ -261,24 +276,24 @@ export function CustomerManagement() {
                               )}
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-gray-900">${order.total.toFixed(2)}</span>
+                              <span className="text-sm font-bold text-gray-900">${Number(order.total).toFixed(2)}</span>
                               {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
                             </div>
                           </button>
 
                           {isOpen && (
                             <div className="px-4 pb-4 bg-gray-50 border-t border-gray-100 space-y-3 pt-3">
-                              <p className="text-xs text-gray-500">Ordered: {order.orderDate}</p>
+                              <p className="text-xs text-gray-500">Ordered: {new Date(order.orderDate).toLocaleString()}</p>
                               <p className="text-xs text-gray-500">📍 {order.shippingAddress}</p>
-                              {order.products.map((p, i) => (
-                                <div key={i} className="flex justify-between text-sm bg-white rounded p-2 border border-gray-200">
+                              {order.items.map((p) => (
+                                <div key={p.id} className="flex justify-between text-sm bg-white rounded p-2 border border-gray-200">
                                   <span className="text-gray-700">{p.quantity}× {p.name}</span>
-                                  <span className="font-medium">${(p.price * p.quantity).toFixed(2)}</span>
+                                  <span className="font-medium">${(Number(p.price) * p.quantity).toFixed(2)}</span>
                                 </div>
                               ))}
                               <div className="flex justify-between text-sm font-bold border-t border-gray-200 pt-2">
                                 <span>Total</span>
-                                <span>${order.total.toFixed(2)}</span>
+                                <span>${Number(order.total).toFixed(2)}</span>
                               </div>
                             </div>
                           )}
