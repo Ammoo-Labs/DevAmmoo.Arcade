@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, LogOut, User, Store } from "lucide-react";
+import { ChevronDown, LogOut, User, Store, ShieldCheck } from "lucide-react";
 import { ActionButton } from "@/ui/components/button";
 import { useAuth } from "@/ui/components/auth/auth-context";
 
@@ -63,16 +63,18 @@ export default function UserMenu({ buttonText = "Welcome" }: UserMenuProps) {
               </div>
 
               <Link
-                href={user.role === "seller" ? "/seller" : "/profile"}
+                href={user.role === "admin" ? "/admin" : user.role === "seller" ? "/seller" : "/profile"}
                 onClick={() => setIsOpen(false)}
                 className="flex items-center gap-2 w-full text-left px-4 py-2.5 sm:py-2 text-sm hover:bg-gray-100 transition-colors"
               >
-                {user.role === "seller" ? (
+                {user.role === "admin" ? (
+                  <ShieldCheck className="w-4 h-4" />
+                ) : user.role === "seller" ? (
                   <Store className="w-4 h-4" />
                 ) : (
                   <User className="w-4 h-4" />
                 )}
-                {user.role === "seller" ? "Seller Dashboard" : "My Profile"}
+                {user.role === "admin" ? "Admin Dashboard" : user.role === "seller" ? "Seller Dashboard" : "My Profile"}
               </Link>
 
               <hr className="my-1 border-gray-200" />

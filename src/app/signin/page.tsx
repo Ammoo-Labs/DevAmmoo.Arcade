@@ -24,7 +24,7 @@ export default function SignInPage() {
   // Redirect if already authenticated (e.g. navigating back to /signin while logged in)
   useEffect(() => {
     if (isAuthenticated && user) {
-      router.push(user.role === 'seller' ? '/seller' : '/');
+      router.push(user.role === 'admin' ? '/admin' : user.role === 'seller' ? '/seller' : '/');
     }
   }, [isAuthenticated, user, router]);
 
@@ -79,7 +79,7 @@ export default function SignInPage() {
       } else {
         showSuccess("Welcome back! You have been signed in successfully.", "Sign In Successful");
         // profile is null if backend is unreachable; fall back to '/' and let role-based routing handle it
-        router.push(profile?.role === 'seller' ? '/seller' : '/');
+        router.push(profile?.role === 'admin' ? '/admin' : profile?.role === 'seller' ? '/seller' : '/');
       }
     } catch (error) {
       console.error("Sign in error:", error);

@@ -124,7 +124,7 @@ export default function Header() {
                   )}
                 </Link>
                 {isAuthenticated && (
-                  <Link href={user?.role === "seller" ? "/seller" : "/profile"}>
+                  <Link href={user?.role === "admin" ? "/admin" : user?.role === "seller" ? "/seller" : "/profile"}>
                     <IconButton
                       icon="custom"
                       variant="ghost"
@@ -152,7 +152,7 @@ export default function Header() {
                   )}
                 </Link>
                 {isAuthenticated && (
-                  <Link href={user?.role === "seller" ? "/seller" : "/profile"}>
+                  <Link href={user?.role === "admin" ? "/admin" : user?.role === "seller" ? "/seller" : "/profile"}>
                     <IconButton
                       icon="custom"
                       variant="ghost"
@@ -207,7 +207,7 @@ export default function Header() {
                 </Link>
                 {isAuthenticated && (
                   <Link
-                    href={user?.role === "seller" ? "/seller" : "/profile"}
+                    href={user?.role === "admin" ? "/admin" : user?.role === "seller" ? "/seller" : "/profile"}
                     onClick={() => setIsMobileMenuOpen(false)}
                     className="flex items-center gap-2 text-sm font-medium hover:text-gray-600 transition-colors"
                   >
