@@ -22,7 +22,7 @@ import { addToWishlist, removeFromWishlist, isInWishlist } from "@/lib/api/wishl
 import { listProducts } from "@/lib/api/products";
 import ProductCard from "./product-card";
 import ProductReviews from "./product-reviews";
-import { formatLKR } from "./currency";
+import { formatCurrency } from "@/lib/currency";
 
 interface ProductDetailsProps {
   product: Product;
@@ -434,10 +434,10 @@ export default function ProductDetails({ product, onBack }: ProductDetailsProps)
 
             {/* Price */}
             <div className="flex items-center gap-3 mb-5 pb-5 border-b border-gray-100">
-              <span className="text-2xl font-bold text-gray-900">{formatLKR(product.price)}</span>
+              <span className="text-2xl font-bold text-gray-900">{formatCurrency(product.price)}</span>
               {product.originalPrice && (
                 <span className="text-base text-gray-400 line-through">
-                  {formatLKR(product.originalPrice)}
+                  {formatCurrency(product.originalPrice)}
                 </span>
               )}
               {discountPercentage > 0 && (

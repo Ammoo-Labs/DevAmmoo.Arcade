@@ -22,6 +22,7 @@ import {
 } from "@/lib/api/admin";
 import { BackendShop, BackendPayoutRequest } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
+import { formatCurrency } from "@/lib/currency";
 
 type SellerAccountStatus = "active" | "inactive" | "suspended" | "banned";
 
@@ -370,7 +371,7 @@ export function SellerManagement() {
                         <p className="text-sm font-medium text-gray-900">Seller ID: {req.sellerId}</p>
                         <p className="text-xs text-gray-500">{new Date(req.requestDate).toLocaleDateString()}</p>
                       </div>
-                      <span className="text-base font-bold text-gray-900">${Number(req.amount).toFixed(2)}</span>
+                      <span className="text-base font-bold text-gray-900">{formatCurrency(req.amount)}</span>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pc.cls}`}>{pc.label}</span>
                     </div>
                     {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}

@@ -2,7 +2,7 @@
 import { useState, useRef } from "react";
 import { Package, Upload, X, AlertCircle, Eye, CheckCircle } from "lucide-react";
 import { ShopWizardData } from "./shop-wizard";
-import { formatLKR } from "@/ui/components/product/currency";
+import { formatCurrency } from "@/lib/currency";
 import { LISTING_CATEGORIES } from "@/ui/components/product/categories";
 
 interface FirstListingStepProps {
@@ -114,7 +114,7 @@ function PreviewModal({
           <div className="p-2">
             <p className="text-xs font-medium text-gray-900 line-clamp-2">{product.name || "Product Name"}</p>
             <p className="text-sm font-bold text-gray-900 mt-0.5">
-              {product.price ? formatLKR(parseFloat(product.price)) : "LKR —"}
+              {product.price ? formatCurrency(parseFloat(product.price)) : "LKR —"}
             </p>
           </div>
         </div>
@@ -124,7 +124,7 @@ function PreviewModal({
           <p className="text-sm font-bold text-gray-900">{product.name || "—"}</p>
           <p className="text-xs text-gray-500">Category: {product.category || "—"}</p>
           <p className="text-base font-bold">
-            {product.price ? formatLKR(parseFloat(product.price)) : "—"}
+            {product.price ? formatCurrency(parseFloat(product.price)) : "—"}
           </p>
           {product.description && (
             <p className="text-xs text-gray-600 line-clamp-3">{product.description}</p>

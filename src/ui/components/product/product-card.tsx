@@ -9,7 +9,7 @@ import { ProductCardProps } from "./types";
 import { useCart } from "@/ui/components/cart";
 import { useAuth } from "@/ui/components/auth/auth-context";
 import { addToWishlist, removeFromWishlist, isInWishlist } from "@/lib/api/wishlist";
-import { formatLKR } from "./currency";
+import { formatCurrency } from "@/lib/currency";
 
 export default function ProductCard({
   product,
@@ -135,11 +135,11 @@ export default function ProductCard({
         <div className="flex items-center justify-between gap-1">
           <div className="flex flex-col min-w-0">
             <span className="font-bold text-sm sm:text-base text-gray-900 leading-tight">
-              {formatLKR(product.price)}
+              {formatCurrency(product.price)}
             </span>
             {product.originalPrice && (
               <span className="text-xs text-gray-400 line-through leading-tight">
-                {formatLKR(product.originalPrice)}
+                {formatCurrency(product.originalPrice)}
               </span>
             )}
           </div>

@@ -21,6 +21,7 @@ import {
 } from "@/lib/api/admin";
 import { BackendProduct } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
+import { formatCurrency } from "@/lib/currency";
 
 type PostApprovalStatus = 'pending' | 'approved' | 'rejected' | 'under_review';
 
@@ -232,7 +233,7 @@ export function PostManagement() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">{p.shop?.shopName ?? "—"}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{p.category}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">${Number(p.price).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrency(p.price)}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${cfg.cls}`}>
                         {cfg.icon}
@@ -344,7 +345,7 @@ export function PostManagement() {
                   ["Name", selectedProduct.name],
                   ["Shop", selectedProduct.shop?.shopName ?? "—"],
                   ["Category", selectedProduct.category],
-                  ["Price", `$${Number(selectedProduct.price).toFixed(2)}`],
+                  ["Price", formatCurrency(selectedProduct.price)],
                   ["Stock", String(selectedProduct.stock)],
                   ["Status", selectedProduct.status],
                   ["Created", new Date(selectedProduct.createdAt).toLocaleDateString()],

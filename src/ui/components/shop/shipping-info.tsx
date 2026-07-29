@@ -1,6 +1,7 @@
 "use client";
 
 import { shopClasses } from './shop-colors';
+import { formatCurrency } from '@/lib/currency';
 
 export function ShippingInfo() {
   return (
@@ -21,22 +22,22 @@ export function ShippingInfo() {
                 {
                   title: "Standard Shipping",
                   time: "5-7 business days",
-                  price: "Free on orders over $50",
+                  price: `Free on orders over ${formatCurrency(50)}`,
                 },
                 {
                   title: "Express Shipping",
                   time: "2-3 business days",
-                  price: "$9.99",
+                  price: formatCurrency(9.99),
                 },
                 {
                   title: "Next Day Delivery",
                   time: "1 business day",
-                  price: "$19.99",
+                  price: formatCurrency(19.99),
                 },
                 {
                   title: "Same Day Delivery",
                   time: "Within 4 hours (select areas)",
-                  price: "$29.99",
+                  price: formatCurrency(29.99),
                 },
               ].map((method) => (
                 <div

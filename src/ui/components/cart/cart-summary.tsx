@@ -3,6 +3,7 @@
 import { CartSummary } from "./types";
 import { ActionButton } from "@/ui/components/button";
 import { ShoppingBag, CreditCard } from "lucide-react";
+import { formatCurrency } from "@/lib/currency";
 
 interface CartSummaryProps {
   summary: CartSummary;
@@ -29,28 +30,28 @@ export default function CartSummaryCard({
           <span>
             Items ({selectedCount} of {itemCount} selected)
           </span>
-          <span>${summary.subtotal.toFixed(2)}</span>
+          <span>{formatCurrency(summary.subtotal)}</span>
         </div>
 
         {/* Shipping */}
         <div className="flex justify-between text-sm text-gray-600">
           <span>Shipping</span>
           <span>
-            {summary.shipping === 0 ? 'Free' : `$${summary.shipping.toFixed(2)}`}
+            {summary.shipping === 0 ? 'Free' : formatCurrency(summary.shipping)}
           </span>
         </div>
 
         {/* Tax */}
         <div className="flex justify-between text-sm text-gray-600">
           <span>Tax</span>
-          <span>${summary.tax.toFixed(2)}</span>
+          <span>{formatCurrency(summary.tax)}</span>
         </div>
 
         {/* Savings */}
         {summary.savings && summary.savings > 0 && (
           <div className="flex justify-between text-sm text-green-600 font-medium">
             <span>You Save</span>
-            <span>-${summary.savings.toFixed(2)}</span>
+            <span>-{formatCurrency(summary.savings)}</span>
           </div>
         )}
 
@@ -59,7 +60,7 @@ export default function CartSummaryCard({
         {/* Total */}
         <div className="flex justify-between text-lg font-bold text-gray-900">
           <span>Total</span>
-          <span>${summary.total.toFixed(2)}</span>
+          <span>{formatCurrency(summary.total)}</span>
         </div>
       </div>
 

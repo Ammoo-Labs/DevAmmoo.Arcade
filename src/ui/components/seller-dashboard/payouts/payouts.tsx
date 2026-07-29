@@ -28,6 +28,7 @@ import {
 } from "@/lib/api/payouts";
 import { BackendPayoutTransaction, BackendWallet } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
+import { formatCurrency } from "@/lib/currency";
 
 const TXN_STATUS_CONFIG: Record<
   string,
@@ -158,13 +159,13 @@ export default function Payouts() {
     }
     if (amount < wallet.minimumWithdrawal) {
       setWithdrawError(
-        `Minimum withdrawal is $${wallet.minimumWithdrawal.toFixed(2)}. Your requested amount is below the threshold.`
+        `Minimum withdrawal is ${formatCurrency(wallet.minimumWithdrawal)}. Your requested amount is below the threshold.`
       );
       return;
     }
     if (amount > wallet.available) {
       setWithdrawError(
-        `Insufficient balance. Your available balance is $${wallet.available.toFixed(2)}.`
+        `Insufficient balance. Your available balance is ${formatCurrency(wallet.available)}.`
       );
       return;
     }
@@ -242,7 +243,7 @@ export default function Payouts() {
             icon: DollarSign,
             iconBg: "bg-black",
             iconColor: "text-white",
-            note: `Min. withdrawal: $${wallet.minimumWithdrawal}`,
+            note: `Min. withdrawal: ${formatCurrency(wallet.minimumWithdrawal)}`,
             highlight: true,
           },
         ].map((card) => {
@@ -267,7 +268,7 @@ export default function Payouts() {
                   </span>
                 )}
               </div>
-              <p className="text-2xl font-bold text-gray-900 mt-2">${card.value.toFixed(2)}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-2">{formatCurrency(card.value)}</p>
               <p className="text-sm font-medium text-gray-700 mt-1">{card.label}</p>
               <p className="text-xs text-gray-400 mt-1">{card.note}</p>
             </div>
@@ -282,8 +283,8 @@ export default function Payouts() {
           <div>
             <p className="text-sm font-semibold text-orange-800">Withdrawal Not Available Yet</p>
             <p className="text-sm text-orange-700 mt-1">
-              Your available balance (${wallet.available.toFixed(2)}) is below the minimum withdrawal
-              threshold of <strong>${wallet.minimumWithdrawal.toFixed(2)}</strong>. Complete more orders to
+              Your available balance ({formatCurrency(wallet.available)}) is below the minimum withdrawal
+              threshold of <strong>{formatCurrency(wallet.minimumWithdrawal)}</strong>. Complete more orders to
               increase your balance.
             </p>
           </div>
@@ -300,10 +301,10 @@ export default function Payouts() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Withdrawal Amount ($)
+              Withdrawal Amount (LKR)
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-2.5 text-gray-400 font-medium">$</span>
+              <span className="absolute left-3 top-2.5 text-gray-400 font-medium text-sm">LKR</span>
               <input
                 type="number"
                 min={wallet.minimumWithdrawal}
@@ -315,12 +316,12 @@ export default function Payouts() {
                   setWithdrawError("");
                 }}
                 placeholder={`${wallet.minimumWithdrawal}.00`}
-                className="w-full pl-7 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                className="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
                 disabled={!canWithdraw}
               />
             </div>
             <p className="text-xs text-gray-400 mt-1">
-              Min: ${wallet.minimumWithdrawal.toFixed(2)} · Available: ${wallet.available.toFixed(2)}
+              Min: {formatCurrency(wallet.minimumWithdrawal)} · Available: {formatCurrency(wallet.available)}
             </p>
           </div>
 
@@ -527,7 +528,7 @@ export default function Payouts() {
                     <tr key={txn.id} className="hover:bg-gray-50 transition-colors">
                       <td className="py-3 px-6 font-mono text-sm text-gray-700">{txn.id}</td>
                       <td className="py-3 px-6 text-sm text-gray-600">{new Date(txn.date).toLocaleDateString()}</td>
-                      <td className="py-3 px-6 font-semibold text-gray-900">${Number(txn.amount).toFixed(2)}</td>
+                      <td className="py-3 px-6 font-semibold text-gray-900">{formatCurrency(txn.amount)}</td>
                       <td className="py-3 px-6 text-sm text-gray-600">{txn.method}</td>
                       <td className="py-3 px-6">
                         <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${cfg.badge}`}>

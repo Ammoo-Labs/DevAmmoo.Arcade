@@ -26,6 +26,7 @@ import {
 } from "@/lib/api/products";
 import { BackendProduct } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
+import { formatCurrency } from "@/lib/currency";
 
 const CATEGORIES = [
   "Fashion",
@@ -387,10 +388,10 @@ export default function Products() {
                     </td>
                     <td className="py-4 px-4 text-gray-600">{product.category}</td>
                     <td className="py-4 px-4">
-                      <p className="font-medium text-gray-900">${price.toFixed(2)}</p>
+                      <p className="font-medium text-gray-900">{formatCurrency(price)}</p>
                       {originalPrice && (
                         <p className="text-xs text-gray-400 line-through">
-                          ${originalPrice.toFixed(2)}
+                          {formatCurrency(originalPrice)}
                         </p>
                       )}
                     </td>
@@ -738,8 +739,8 @@ export default function Products() {
               {[
                 ["Name", viewProduct.name],
                 ["Category", viewProduct.category],
-                ["Price", `$${Number(viewProduct.price).toFixed(2)}`],
-                ["Original Price", viewProduct.originalPrice ? `$${Number(viewProduct.originalPrice).toFixed(2)}` : "—"],
+                ["Price", formatCurrency(viewProduct.price)],
+                ["Original Price", viewProduct.originalPrice ? formatCurrency(viewProduct.originalPrice) : "—"],
                 ["Stock", String(viewProduct.stock)],
                 ["Status", viewProduct.status],
                 ["Sales", String(viewProduct.sales)],

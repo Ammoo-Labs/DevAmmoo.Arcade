@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CartItem } from "./types";
 import { ActionButton, IconButton } from "@/ui/components/button";
 import { Minus, Plus, Trash2, Heart } from "lucide-react";
+import { formatCurrency } from "@/lib/currency";
 
 interface CartItemCardProps {
   item: CartItem;
@@ -104,17 +105,17 @@ export default function CartItemCard({
                 <div className="text-right">
                   <div className="flex items-center gap-2">
                     <span className="text-lg font-bold text-gray-900">
-                      ${item.price.toFixed(2)}
+                      {formatCurrency(item.price)}
                     </span>
                     {item.originalPrice && (
                       <span className="text-sm text-gray-500 line-through">
-                        ${item.originalPrice.toFixed(2)}
+                        {formatCurrency(item.originalPrice)}
                       </span>
                     )}
                   </div>
                   {savings > 0 && (
                     <p className="text-sm text-green-600 font-medium">
-                      Save ${savings.toFixed(2)}
+                      Save {formatCurrency(savings)}
                     </p>
                   )}
                 </div>
