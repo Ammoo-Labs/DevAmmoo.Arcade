@@ -17,6 +17,7 @@ import { getMyProducts } from "@/lib/api/products";
 import { getWallet } from "@/lib/api/payouts";
 import { BackendOrder, BackendProduct, BackendWallet } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
+import { formatCurrency } from "@/lib/currency";
 
 interface StatCard {
   title: string;
@@ -80,7 +81,7 @@ export default function ShopOverview() {
     : 0;
 
   const statsData: StatCard[] = [
-    { title: "Total Revenue", value: `$${totalRevenue.toFixed(2)}`, icon: DollarSign },
+    { title: "Total Revenue", value: formatCurrency(totalRevenue), icon: DollarSign },
     { title: "Total Orders", value: String(totalOrders), icon: ShoppingBag },
     { title: "Total Products", value: String(totalProducts), icon: Eye },
     { title: "Customer Rating", value: avgRating ? avgRating.toFixed(1) : "—", icon: Star },
@@ -175,7 +176,7 @@ export default function ShopOverview() {
                 <div key={order.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
-                      <p className="font-medium text-gray-900 font-mono text-sm">{order.id}</p>
+                      <p className="font-medium text-gray-900 font-mono text-sm">{order.orderNumber}</p>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(order.status)}`}>
                         {order.status.replace("_", " ")}
                       </span>
@@ -187,7 +188,7 @@ export default function ShopOverview() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-gray-900">${Number(order.total).toFixed(2)}</p>
+                    <p className="font-semibold text-gray-900">{formatCurrency(order.total)}</p>
                     <p className="text-sm text-gray-500">{new Date(order.orderDate).toLocaleDateString()}</p>
                   </div>
                 </div>
@@ -217,7 +218,7 @@ export default function ShopOverview() {
                     <p className="text-sm text-gray-500">{product.sales} sales</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-gray-900">${product.revenue.toFixed(2)}</p>
+                    <p className="font-semibold text-gray-900">{formatCurrency(product.revenue)}</p>
                     <div className="w-20 bg-gray-200 rounded-full h-2 mt-1">
                       <div
                         className="bg-black h-2 rounded-full"

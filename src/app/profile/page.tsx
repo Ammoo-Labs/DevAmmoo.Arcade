@@ -30,6 +30,7 @@ import { ActionButton } from "@/ui/components/button";
 import Link from "next/link";
 import { getMyOrders } from "@/lib/api/orders";
 import { BackendOrder } from "@/lib/api/types";
+import { formatCurrency } from "@/lib/currency";
 import { getFollowedShops, FollowedShop } from "@/lib/api/shops";
 
 type OrderStatus =
@@ -414,7 +415,7 @@ export default function ProfilePage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-3 flex-wrap">
                             <span className="font-mono text-sm font-medium text-gray-900">
-                              {order.id}
+                              {order.orderNumber}
                             </span>
                             <span
                               className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.badge}`}
@@ -430,7 +431,7 @@ export default function ProfilePage() {
                           </div>
                           <p className="text-xs text-gray-400 mt-1">
                             {new Date(order.orderDate).toLocaleDateString()} · {order.items.length} item
-                            {order.items.length > 1 ? "s" : ""} · ${Number(order.total).toFixed(2)}
+                            {order.items.length > 1 ? "s" : ""} · {formatCurrency(order.total)}
                           </p>
                         </div>
                         {isExpanded ? (
@@ -459,7 +460,7 @@ export default function ProfilePage() {
                                 </p>
                               </div>
                               <p className="text-sm font-semibold text-gray-900">
-                                ${(Number(item.price) * item.quantity).toFixed(2)}
+                                {formatCurrency(Number(item.price) * item.quantity)}
                               </p>
                             </div>
                           ))}
@@ -469,17 +470,17 @@ export default function ProfilePage() {
                         <div className="bg-white rounded-lg border border-gray-200 p-3 text-sm space-y-1">
                           <div className="flex justify-between text-gray-500">
                             <span>Subtotal</span>
-                            <span>${Number(order.subtotal).toFixed(2)}</span>
+                            <span>{formatCurrency(order.subtotal)}</span>
                           </div>
                           <div className="flex justify-between text-gray-500">
                             <span>Shipping</span>
                             <span>
-                              {Number(order.shipping) === 0 ? "Free" : `$${Number(order.shipping).toFixed(2)}`}
+                              {Number(order.shipping) === 0 ? "Free" : formatCurrency(order.shipping)}
                             </span>
                           </div>
                           <div className="flex justify-between font-bold text-gray-900 border-t border-gray-100 pt-1 mt-1">
                             <span>Total</span>
-                            <span>${Number(order.total).toFixed(2)}</span>
+                            <span>{formatCurrency(order.total)}</span>
                           </div>
                         </div>
 

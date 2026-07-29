@@ -19,6 +19,7 @@ import { useAuth } from "@/ui/components/auth/auth-context";
 import { getUsers, getAllOrders } from "@/lib/api/admin";
 import { BackendAdminUser, BackendOrder } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
+import { formatCurrency } from "@/lib/currency";
 
 const STATUS_CFG: Record<string, { badge: string; icon: React.ReactNode }> = {
   pending:    { badge: "bg-yellow-100 text-yellow-800",  icon: <Clock className="w-3.5 h-3.5" /> },
@@ -120,7 +121,7 @@ export function CustomerManagement() {
         {[
           { label: "Total Customers", value: customers.length, color: "text-gray-900" },
           { label: "Total Orders",    value: totalOrders,       color: "text-blue-700" },
-          { label: "Total Revenue",   value: `$${totalSpend.toFixed(0)}`, color: "text-green-700" },
+          { label: "Total Revenue",   value: formatCurrency(totalSpend), color: "text-green-700" },
         ].map((s) => (
           <div key={s.label} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm text-center">
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -266,7 +267,7 @@ export function CustomerManagement() {
                             onClick={() => setExpandedOrder(isOpen ? null : order.id)}
                           >
                             <div className="flex items-center gap-3">
-                              <span className="font-mono text-xs text-gray-500">{order.id}</span>
+                              <span className="font-mono text-xs text-gray-500">{order.orderNumber}</span>
                               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.badge}`}>
                                 {cfg.icon}
                                 {getStatusLabel(order.status)}
@@ -276,7 +277,7 @@ export function CustomerManagement() {
                               )}
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-gray-900">${Number(order.total).toFixed(2)}</span>
+                              <span className="text-sm font-bold text-gray-900">{formatCurrency(order.total)}</span>
                               {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
                             </div>
                           </button>
@@ -288,12 +289,12 @@ export function CustomerManagement() {
                               {order.items.map((p) => (
                                 <div key={p.id} className="flex justify-between text-sm bg-white rounded p-2 border border-gray-200">
                                   <span className="text-gray-700">{p.quantity}× {p.name}</span>
-                                  <span className="font-medium">${(Number(p.price) * p.quantity).toFixed(2)}</span>
+                                  <span className="font-medium">{formatCurrency(Number(p.price) * p.quantity)}</span>
                                 </div>
                               ))}
                               <div className="flex justify-between text-sm font-bold border-t border-gray-200 pt-2">
                                 <span>Total</span>
-                                <span>${Number(order.total).toFixed(2)}</span>
+                                <span>{formatCurrency(order.total)}</span>
                               </div>
                             </div>
                           )}

@@ -18,6 +18,7 @@ import { useAuth } from "@/ui/components/auth/auth-context";
 import { getAllOrders, markOrderReviewed } from "@/lib/api/admin";
 import { BackendOrder } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
+import { formatCurrency } from "@/lib/currency";
 
 interface StatusHistoryEntry {
   status: string;
@@ -75,7 +76,7 @@ export function OrderManagement() {
   const filtered = orders.filter((o) => {
     const q = searchTerm.toLowerCase();
     const matchSearch =
-      o.id.toLowerCase().includes(q) ||
+      o.orderNumber.toLowerCase().includes(q) ||
       o.customerName.toLowerCase().includes(q) ||
       o.customerEmail.toLowerCase().includes(q) ||
       (o.trackingNumber ?? "").toLowerCase().includes(q);
@@ -133,7 +134,7 @@ export function OrderManagement() {
           { label: "Total Orders",     value: orders.length,          color: "text-gray-900" },
           { label: "Pending",          value: counts.pending ?? 0,    color: "text-yellow-700" },
           { label: "Shipped",          value: counts.shipped ?? 0,    color: "text-purple-700" },
-          { label: "Revenue (Completed)", value: `$${totalRevenue.toFixed(0)}`, color: "text-green-700" },
+          { label: "Revenue (Completed)", value: formatCurrency(totalRevenue), color: "text-green-700" },
         ].map((s) => (
           <div key={s.label} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm text-center">
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -173,7 +174,7 @@ export function OrderManagement() {
           <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by order ID, customer, or tracking..."
+            placeholder="Search by order number, customer, or tracking..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
@@ -205,7 +206,7 @@ export function OrderManagement() {
                     className={`hover:bg-gray-50 transition-colors ${isNew ? "bg-yellow-50" : ""}`}
                   >
                     <td className="px-4 py-3">
-                      <p className="font-mono text-xs font-medium text-gray-900">{order.id}</p>
+                      <p className="font-mono text-xs font-medium text-gray-900">{order.orderNumber}</p>
                       <p className="text-xs text-gray-400">{new Date(order.orderDate).toLocaleDateString()}</p>
                       {isNew && (
                         <span className="text-xs font-medium text-yellow-700 bg-yellow-100 px-1.5 py-0.5 rounded-full">New</span>
@@ -215,7 +216,7 @@ export function OrderManagement() {
                       <p className="text-sm text-gray-900">{order.customerName}</p>
                       <p className="text-xs text-gray-500">{order.customerEmail}</p>
                     </td>
-                    <td className="px-4 py-3 text-sm font-semibold text-gray-900">${Number(order.total).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-gray-900">{formatCurrency(order.total)}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${cfg.badge}`}>
                         {cfg.icon}
@@ -263,7 +264,7 @@ export function OrderManagement() {
           <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold font-mono">{selectedOrder.id}</h3>
+                <h3 className="text-lg font-semibold font-mono">{selectedOrder.orderNumber}</h3>
                 <p className="text-sm text-gray-500">{new Date(selectedOrder.orderDate).toLocaleString()}</p>
               </div>
               <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-gray-600">
@@ -319,7 +320,7 @@ export function OrderManagement() {
                           {p.color ? ` · ${p.color}` : ""}
                         </p>
                       </div>
-                      <p className="font-semibold">${(Number(p.price) * p.quantity).toFixed(2)}</p>
+                      <p className="font-semibold">{formatCurrency(Number(p.price) * p.quantity)}</p>
                     </div>
                   ))}
                 </div>
@@ -328,16 +329,16 @@ export function OrderManagement() {
               {/* Totals */}
               <div className="bg-gray-50 rounded-lg p-4 space-y-1 text-sm">
                 {[
-                  ["Subtotal", `$${Number(selectedOrder.subtotal).toFixed(2)}`],
-                  ["Tax",      `$${Number(selectedOrder.tax).toFixed(2)}`],
-                  ["Shipping", Number(selectedOrder.shipping) === 0 ? "Free" : `$${Number(selectedOrder.shipping).toFixed(2)}`],
+                  ["Subtotal", formatCurrency(selectedOrder.subtotal)],
+                  ["Tax",      formatCurrency(selectedOrder.tax)],
+                  ["Shipping", Number(selectedOrder.shipping) === 0 ? "Free" : formatCurrency(selectedOrder.shipping)],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between text-gray-600">
                     <span>{k}</span><span>{v}</span>
                   </div>
                 ))}
                 <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-2 mt-1">
-                  <span>Total</span><span>${Number(selectedOrder.total).toFixed(2)}</span>
+                  <span>Total</span><span>{formatCurrency(selectedOrder.total)}</span>
                 </div>
               </div>
 

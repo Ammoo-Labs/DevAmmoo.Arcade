@@ -26,6 +26,7 @@ import {
 } from "@/lib/api/orders";
 import { BackendOrder } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
+import { formatCurrency } from "@/lib/currency";
 
 interface StatusHistoryEntry {
   status: string;
@@ -134,6 +135,7 @@ export default function Orders() {
   // Shipping modal state
   const [pendingTransition, setPendingTransition] = useState<{
     orderId: string;
+    orderNumber: string;
     status: OrderStatusValue;
   } | null>(null);
   const [trackingInput, setTrackingInput] = useState("");
@@ -165,7 +167,7 @@ export default function Orders() {
   const filteredOrders = orders.filter((o) => {
     const q = searchTerm.toLowerCase();
     const matchesSearch =
-      o.id.toLowerCase().includes(q) ||
+      o.orderNumber.toLowerCase().includes(q) ||
       o.customerName.toLowerCase().includes(q) ||
       o.customerEmail.toLowerCase().includes(q);
     return matchesSearch && (statusFilter === "all" || o.status === statusFilter);
@@ -180,10 +182,10 @@ export default function Orders() {
     reader.readAsDataURL(file);
   };
 
-  const handleTransitionClick = (orderId: string, newStatus: OrderStatusValue) => {
+  const handleTransitionClick = (orderId: string, orderNumber: string, newStatus: OrderStatusValue) => {
     setTransitionError("");
     if (newStatus === "shipped") {
-      setPendingTransition({ orderId, status: newStatus });
+      setPendingTransition({ orderId, orderNumber, status: newStatus });
       setTrackingInput("");
       setHandoverProofFile(null);
       setHandoverProofPreview("");
@@ -282,7 +284,7 @@ export default function Orders() {
             <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by order ID, customer name or email..."
+              placeholder="Search by order number, customer name or email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
@@ -322,7 +324,7 @@ export default function Orders() {
                 return (
                   <tr key={order.id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-4 px-4">
-                      <p className="font-mono font-medium text-gray-900 text-sm">{order.id}</p>
+                      <p className="font-mono font-medium text-gray-900 text-sm">{order.orderNumber}</p>
                       <p className="text-xs text-gray-400">{order.paymentStatus === "paid" ? "Paid" : "Pending payment"}</p>
                     </td>
                     <td className="py-4 px-4">
@@ -341,7 +343,7 @@ export default function Orders() {
                         )}
                       </div>
                     </td>
-                    <td className="py-4 px-4 font-semibold text-gray-900">${total.toFixed(2)}</td>
+                    <td className="py-4 px-4 font-semibold text-gray-900">{formatCurrency(total)}</td>
                     <td className="py-4 px-4">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${cfg.badge}`}>
                         {cfg.icon}
@@ -377,7 +379,7 @@ export default function Orders() {
                                 return (
                                   <button
                                     key={t}
-                                    onClick={() => handleTransitionClick(order.id, t)}
+                                    onClick={() => handleTransitionClick(order.id, order.orderNumber, t)}
                                     className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-medium hover:bg-gray-50 transition-colors text-left first:rounded-t-lg last:rounded-b-lg ${
                                       isCancel ? "text-red-600 hover:bg-red-50" : "text-gray-700"
                                     }`}
@@ -425,7 +427,7 @@ export default function Orders() {
             <div className="p-6 space-y-4">
               <p className="text-sm text-gray-600">
                 Enter a tracking number and upload proof of handover for order{" "}
-                <strong>{pendingTransition.orderId}</strong>.
+                <strong>{pendingTransition.orderNumber}</strong>.
               </p>
 
               {/* Tracking Number */}
@@ -525,7 +527,7 @@ export default function Orders() {
           <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-xl">
               <div>
-                <h3 className="text-lg font-semibold">{selectedOrder.id}</h3>
+                <h3 className="text-lg font-semibold">{selectedOrder.orderNumber}</h3>
                 <p className="text-sm text-gray-500">{new Date(selectedOrder.orderDate).toLocaleDateString()}</p>
               </div>
               <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-gray-600">
@@ -575,7 +577,7 @@ export default function Orders() {
                           {p.color && ` · Color: ${p.color}`}
                         </p>
                       </div>
-                      <p className="font-semibold text-gray-900 text-sm">${(Number(p.price) * p.quantity).toFixed(2)}</p>
+                      <p className="font-semibold text-gray-900 text-sm">{formatCurrency(Number(p.price) * p.quantity)}</p>
                     </div>
                   ))}
                 </div>
@@ -584,16 +586,16 @@ export default function Orders() {
               {/* Totals */}
               <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
                 <div className="flex justify-between text-gray-600">
-                  <span>Subtotal</span><span>${Number(selectedOrder.subtotal).toFixed(2)}</span>
+                  <span>Subtotal</span><span>{formatCurrency(selectedOrder.subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
-                  <span>Shipping</span><span>{Number(selectedOrder.shipping) === 0 ? "Free" : `$${Number(selectedOrder.shipping).toFixed(2)}`}</span>
+                  <span>Shipping</span><span>{Number(selectedOrder.shipping) === 0 ? "Free" : formatCurrency(selectedOrder.shipping)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
-                  <span>Tax</span><span>${Number(selectedOrder.tax).toFixed(2)}</span>
+                  <span>Tax</span><span>{formatCurrency(selectedOrder.tax)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-2">
-                  <span>Total</span><span>${Number(selectedOrder.total).toFixed(2)}</span>
+                  <span>Total</span><span>{formatCurrency(selectedOrder.total)}</span>
                 </div>
               </div>
 
@@ -639,8 +641,9 @@ export default function Orders() {
                           key={t}
                           onClick={() => {
                             const orderId = selectedOrder.id;
+                            const orderNumber = selectedOrder.orderNumber;
                             setSelectedOrder(null);
-                            handleTransitionClick(orderId, t);
+                            handleTransitionClick(orderId, orderNumber, t);
                           }}
                           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
                             isCancel

@@ -8,6 +8,7 @@ import { ActionButton } from "@/ui/components/button";
 import { useCart } from "@/ui/components/cart";
 import { useAuth } from "@/ui/components/auth/auth-context";
 import { createOrder } from "@/lib/api/orders";
+import { formatCurrency } from "@/lib/currency";
 
 type Step = "details" | "payment" | "confirmation";
 
@@ -18,7 +19,7 @@ export default function CheckoutPage() {
   const [step, setStep] = useState<Step>("details");
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [confirmedOrderId, setConfirmedOrderId] = useState<string | null>(null);
+  const [confirmedOrderNumber, setConfirmedOrderNumber] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     firstName: user?.name?.split(" ")[0] ?? "",
     lastName: user?.name?.split(" ").slice(1).join(" ") ?? "",
@@ -74,7 +75,7 @@ export default function CheckoutPage() {
 
       sessionStorage.removeItem("ammoo-checkout-selected");
       await refreshCart();
-      setConfirmedOrderId(order.id);
+      setConfirmedOrderNumber(order.orderNumber);
       setStep("confirmation");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to place order. Please try again.";
@@ -108,8 +109,8 @@ export default function CheckoutPage() {
           <p className="text-gray-600 mb-2">
             Thank you for your order. We&apos;ve received your order and will send a confirmation email shortly.
           </p>
-          {confirmedOrderId && (
-            <p className="text-sm text-gray-500 mb-8">Order #{confirmedOrderId.slice(-8).toUpperCase()}</p>
+          {confirmedOrderNumber && (
+            <p className="text-sm text-gray-500 mb-8">Order {confirmedOrderNumber}</p>
           )}
           <div className="space-y-3">
             <Link href="/products">
@@ -318,7 +319,7 @@ export default function CheckoutPage() {
                     disabled={isProcessing}
                     className="flex-2 flex-1"
                   >
-                    {isProcessing ? "Processing..." : `Pay $${total.toFixed(2)}`}
+                    {isProcessing ? "Processing..." : `Pay ${formatCurrency(total)}`}
                   </ActionButton>
                 </div>
               </div>
@@ -336,7 +337,7 @@ export default function CheckoutPage() {
                     <p className="text-gray-500 text-xs">Qty: {item.quantity}</p>
                   </div>
                   <span className="font-medium whitespace-nowrap">
-                    ${(item.price * item.quantity).toFixed(2)}
+                    {formatCurrency(item.price * item.quantity)}
                   </span>
                 </div>
               ))}
@@ -345,19 +346,19 @@ export default function CheckoutPage() {
             <div className="border-t border-gray-200 pt-4 space-y-2 text-sm">
               <div className="flex justify-between text-gray-600">
                 <span>Subtotal</span>
-                <span>${subtotal.toFixed(2)}</span>
+                <span>{formatCurrency(subtotal)}</span>
               </div>
               <div className="flex justify-between text-gray-600">
                 <span>Shipping</span>
-                <span>{shipping === 0 ? "Free" : `$${shipping.toFixed(2)}`}</span>
+                <span>{shipping === 0 ? "Free" : formatCurrency(shipping)}</span>
               </div>
               <div className="flex justify-between text-gray-600">
                 <span>Tax (8%)</span>
-                <span>${tax.toFixed(2)}</span>
+                <span>{formatCurrency(tax)}</span>
               </div>
               <div className="flex justify-between font-bold text-gray-900 text-base border-t border-gray-200 pt-2 mt-2">
                 <span>Total</span>
-                <span>${total.toFixed(2)}</span>
+                <span>{formatCurrency(total)}</span>
               </div>
             </div>
           </div>

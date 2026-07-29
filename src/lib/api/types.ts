@@ -61,6 +61,7 @@ export interface BackendCart {
 
 export interface BackendOrder {
   id: string;
+  orderNumber: string;
   buyerId: string;
   customerName: string;
   customerEmail: string;

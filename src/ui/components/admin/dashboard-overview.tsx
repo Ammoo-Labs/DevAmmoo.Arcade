@@ -4,6 +4,7 @@ import { useAuth } from '@/ui/components/auth/auth-context';
 import { getAdminStats, getAllOrders, getAdminProducts, getAdminShops } from '@/lib/api/admin';
 import { BackendAdminStats } from '@/lib/api/types';
 import { ApiError } from '@/lib/api/client';
+import { formatCurrency } from '@/lib/currency';
 
 interface ActivityItem {
   id: string;
@@ -37,7 +38,7 @@ export function DashboardOverview() {
         const recent: ActivityItem[] = [
           ...orders.map((o) => ({
             id: `order-${o.id}`,
-            text: `New order ${o.id} from ${o.customerName} — $${Number(o.total).toFixed(2)}`,
+            text: `New order ${o.orderNumber} from ${o.customerName} — ${formatCurrency(o.total)}`,
             createdAt: o.createdAt,
           })),
           ...products.map((p) => ({
@@ -72,7 +73,7 @@ export function DashboardOverview() {
         { title: 'Total Users', value: stats.users.total.toLocaleString() },
         { title: 'Active Sellers', value: stats.users.sellers.toLocaleString() },
         { title: 'Pending Products', value: stats.products.pendingApproval.toLocaleString() },
-        { title: 'Revenue', value: `$${stats.revenue.total.toLocaleString()}` },
+        { title: 'Revenue', value: formatCurrency(stats.revenue.total) },
       ]
     : [];
 
